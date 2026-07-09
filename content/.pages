@@ -1,0 +1,14 @@
+nav:
+  - index.md
+  - 딥러닝 컴파일러: 1-dl-compiler
+  - CUDA 커널 프로그래밍: 2-cuda-kernels
+  - CUTLASS / CuTe: 3-cutlass-cute
+  - LLM 추론 최적화: 4-llm-inference
+  - Diffusion 추론: 5-diffusion-inference
+  - CV 배포: 6-cv-deployment
+  - 하드웨어 & 아키텍처: 7-hardware-arch
+  - PyTorch 생태계: 8-pytorch-ecosystem
+  - 논문 & 강의: 9-papers-lectures
+  - 기타이론: 10-Theoretical-stuff
+  - PR 노트: 11-PR-note
+  - zartbot Tensor 시리즈: 12-zartbot-blog
