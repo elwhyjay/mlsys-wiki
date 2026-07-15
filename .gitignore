@@ -1,0 +1,12 @@
+site/
+.venv/
+__pycache__/
+.DS_Store
+unclassified/
+EDITING.md
+*.pdf
+source.zh.md
+
+# 재작도로 교체된 레거시 원본 이미지 (GitHub 용량 절약, 로컬 보관용)
+# 슬래시 없는 패턴 → 어느 깊이의 legacy/ 디렉토리든 무시
+legacy/
