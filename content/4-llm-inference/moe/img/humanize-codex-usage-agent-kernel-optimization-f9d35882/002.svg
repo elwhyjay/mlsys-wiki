@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240">
-  <rect width="960" height="240" fill="#f6f8fa"/>
-  <rect x="16" y="16" width="928" height="208" rx="8" fill="none" stroke="#d0d7de" stroke-width="2"/>
-  <text x="40" y="84" font-family="Arial, sans-serif" font-size="28" fill="#24292f">Missing remote image</text>
-  <text x="40" y="126" font-family="Arial, sans-serif" font-size="18" fill="#57606a">HTTP Error 404: Not Found</text>
-  <text x="40" y="164" font-family="Arial, sans-serif" font-size="16" fill="#57606a">https://raw.githubusercontent.com/BBuf/kernel-pilot/main/docs/assets/kernelpilot-optimization-ledger.png</text>
-</svg>
