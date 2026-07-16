@@ -1,0 +1,56 @@
+site_name: MLsys Wiki
+site_description: GPU 커널, 딥러닝 컴파일러, LLM 추론 최적화 한국어 위키
+site_url: https://elwhyjay.github.io/mlsys-wiki
+docs_dir: content
+
+# 번역 소스 원문(중국어)은 빌드에서 제외
+exclude_docs: |
+  **/source.zh.md
+
+theme:
+  name: material
+  language: ko
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 다크 모드로 전환
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 라이트 모드로 전환
+  features:
+    - navigation.top
+    - navigation.indexes
+    - toc.integrate
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search:
+      lang: ko
+  - awesome-pages
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - attr_list
+  - md_in_html
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js
