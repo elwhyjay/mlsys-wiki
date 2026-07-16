@@ -9,12 +9,6 @@
 
 예전에 OSDI 2020의 《Ansor : Generating High-Performance Tensor Programs for Deep Learning》라는 논문도 읽은 적이 있다. Ansor가 보다 미시적인 관점에서 codegen을 다룬다면, 이번 PET 논문은 보다 거시적인 관점에서 codegen을 다룬다고 할 수 있다.
 
-Ansor든 PET든 개인적으로는 모두 상당히 인상적이라고 생각한다. 이전에 작성한 Ansor 논문 해설은 다음 저장소에서 확인할 수 있다:
-
-[![이미지](./OSDI 2021 PET 论文解读（代码生成相关工作） - 知乎_files/v2-003cd8d219b30f927ccea2b539838f51_180x120.jpg)GitHub - BBuf/tvm_mlir_learn: tvm learngithub.com/BBuf/tvm_mlir_learn](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/tvm_mlir_learn>)
-
-. 관심 있는 분들은 한 번 읽어보시길 권하며, 본 글에서는 PET 논문을 살펴보겠다.
-
 ## **0x1. 제목과 저자**
 
 ![이미지](images/img_01.png)

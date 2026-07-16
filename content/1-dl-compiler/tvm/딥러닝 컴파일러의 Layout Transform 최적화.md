@@ -1,25 +1,5 @@
 # 딥러닝 컴파일러의 Layout Transform 최적화
 
-> 더 많은 딥러닝 [컴파일러](<https://zhida.zhihu.com/search?content_id=228210363&content_type=Article&match_order=1&q=%E7%BC%96%E8%AF%91%E5%99%A8&zd_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ6aGlkYV9zZXJ2ZXIiLCJleHAiOjE3NzgzMTQ3NzMsInEiOiLnvJbor5HlmagiLCJ6aGlkYV9zb3VyY2UiOiJlbnRpdHkiLCJjb250ZW50X2lkIjoyMjgyMTAzNjMsImNvbnRlbnRfdHlwZSI6IkFydGljbGUiLCJtYXRjaF9vcmRlciI6MSwiemRfdG9rZW4iOm51bGx9.S87qW99rQzRHta9u5G62og25qa43x-bKwEydxdB5wmE&zhida_source=entity>) 관련 지식은
-
-[https://github.com/BBuf/tvm_mlir_learngithub.com/BBuf/tvm_mlir_learn](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/tvm_mlir_learn>)
-
-에서 찾을 수 있습니다. 또한 cuda 학습 저장소도 함께 운영하고 있습니다.
-
-[https://github.com/BBuf/how-to-optim-algorithm-in-cudagithub.com/BBuf/how-to-optim-algorithm-in-cuda](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/how-to-optim-algorithm-in-cuda>)
-
-그리고 딥러닝 프레임워크(PyTorch와 OneFlow)를 어떻게 학습할 것인가에 관한 학습 저장소도 있습니다.
-
-[https://github.com/BBuf/how-to-learn-deep-learning-frameworkgithub.com/BBuf/how-to-learn-deep-learning-framework](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/how-to-learn-deep-learning-framework>)
-
-필요하신 분들은 **star를 눌러주세요**.
-
-[![이미지](./深度学习编译器之Layerout Transform优化 - 知乎_files/v2-f0ed856bc8489c9380aca253034991f5_180x120.jpg)how-to-optim-algorithm-in-cuda/large-language-model-note at master · BBuf/how-to-optim-algorithm-in-cudagithub.com/BBuf/how-to-optim-algorithm-in-cuda/tree/master/large-language-model-note](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/how-to-optim-algorithm-in-cuda/tree/master/large-language-model-note>)
-
-이 디렉터리에는 LLM 학습 및 추론과 관련된 일련의 글이 모여 있습니다.
-
-본문 설명에서 일부 interface와 Interface가 혼용되어 사용되는데, 두 표현 모두 MLIR의 Interface를 의미하는 동일한 대상입니다.
-
 
 ## **0x0. 배경**
 
