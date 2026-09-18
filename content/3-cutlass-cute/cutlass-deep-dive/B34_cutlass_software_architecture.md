@@ -6,7 +6,7 @@
 
 [이전 글](../B33_cutlass_basic_recognition/README.md)에서 CUTLASS의 high level 분석과 최적화 수단 overview를 다뤘습니다. 본 글부터 CUTLASS의 각 컴포넌트와 최적화 수단을 단계별로 분석합니다. 첫 글은 **전체 SW 아키텍처와 호출 체인**을 다루고 **debug·성능 분석 방법**을 공유합니다.
 
-![](images/img_001.png)
+![](images/B34_cutlass_software_architecture/img_001.png)
 
 **본 글 초점**:
 
@@ -30,7 +30,7 @@ cutlass/examples/08_turing_tensorop_gemm/turing_tensorop_gemm.cu
 
 **CUTLASS의 SW 계층은 GPU HW 아키텍처와 거의 일치**:
 
-![](images/v2-4819ecc5f631b2797f6ca4fca1672c43_1440w.jpg)
+![](images/B34_cutlass_software_architecture/v2-4819ecc5f631b2797f6ca4fca1672c43_1440w.jpg)
 
 ```
 device(host 측 호출 코드) → kernel(workload별 mma·epilogue dispatch + kernel mma 계산 로직과 epilogue 호출 정의)
@@ -51,7 +51,7 @@ cutlass/include/cutlass/gemm/device/gemm.h
 
 API는 명명으로 이해 가능:
 
-![gemm device 주요 API](images/v2-dd5dae148296b468a6679fb12d458d22_1440w.jpg)
+![gemm device 주요 API](images/B34_cutlass_software_architecture/v2-dd5dae148296b468a6679fb12d458d22_1440w.jpg)
 
 - **`can_implement`**: iterator 검사. L/R matrix 벡터화 load의 **align 검사** — 예: iterA align 16 요구인데 K가 24면 16으로 나누어떨어지지 않아 에러
 - **`get_workspace_size`**: kernel 외 split-k 관련. split-k 미사용 시 workspace는 0. **split-k 보충 설명** — k 차원을 n 분할 reduce sum으로 kernel 병렬도 향상.
@@ -68,21 +68,21 @@ cutlass/include/cutlass/gemm/kernel/default_gemm.h
 cutlass/include/cutlass/gemm/kernel/gemm.h
 ```
 
-![default_gemm.h의 템플릿 특수화](images/v2-89a5815c53c5c3d2a75b719d016e17bf_1440w.jpg)
+![default_gemm.h의 템플릿 특수화](images/B34_cutlass_software_architecture/v2-89a5815c53c5c3d2a75b719d016e17bf_1440w.jpg)
 
 템플릿 특수화 — threadblock의 mma·Epilogue 선언.
 
 계산 메인 로직(앞서 언급한 계층 구조에 매핑):
 
-![gemm.h 핵심 코드(mma 부분)](images/v2-7cdf513e13bda1969ba04361c67615d5_1440w.jpg)
+![gemm.h 핵심 코드(mma 부분)](images/B34_cutlass_software_architecture/v2-7cdf513e13bda1969ba04361c67615d5_1440w.jpg)
 
 split-k 미사용이므로 275행 실행 — load → compute. **`accumulators`는 register**. CUDA에서 local memory와 register 선언 방법은 동일(C++ 정적 길이 배열 선언). 255 초과 시 local memory 사용. NVCC가 자동으로 register 재사용 분석(사용자 비가시).
 
-![gemm.h 핵심 코드(epilogue)](images/v2-7bab49cc81e355feb0020db59154e0dd_1440w.jpg)
+![gemm.h 핵심 코드(epilogue)](images/B34_cutlass_software_architecture/v2-7bab49cc81e355feb0020db59154e0dd_1440w.jpg)
 
 mma 계산 완료 후 누적 결과를 epilogue로 전달(351행).
 
-![linear_combination.h 핵심 코드](images/v2-4253e105034a605cc3af7cebf88fd908_1440w.jpg)
+![linear_combination.h 핵심 코드](images/B34_cutlass_software_architecture/v2-4253e105034a605cc3af7cebf88fd908_1440w.jpg)
 
 `linear_combination`(y = ax) 예로 epilogue 설명:
 
@@ -99,13 +99,13 @@ cutlass/include/cutlass/gemm/threadblock/mma_singlestage.h
 
 **주의**: example 08은 numstage=2이지만, **단일 스테이지 로직이 학습에 매우 명확**(numstage = 파이프라인 stage 수). numstage를 1로 바꾸면 singlestage 호출로 진입.
 
-![default_mma.h의 템플릿 특수화](images/v2-0b9e6b0423fca7ca692c7a011e16e803_1440w.jpg)
+![default_mma.h의 템플릿 특수화](images/B34_cutlass_software_architecture/v2-0b9e6b0423fca7ca692c7a011e16e803_1440w.jpg)
 
 mma 특수화 인자, threadblock 계산 흐름(single 1 / pipelined 2 / multistage N) 정의. **bank conflict free 인덱스 계산은 ThreadMapA/B**. 최적화 세부는 후속 글에서.
 
 `MmaSingleStage` 점프:
 
-![singlestage 핵심 코드](images/v2-72519f106ea9ca0403cad500961662ec_1440w.jpg)
+![singlestage 핵심 코드](images/B34_cutlass_software_architecture/v2-72519f106ea9ca0403cad500961662ec_1440w.jpg)
 
 명확하게 matrixA/B 로드 + mma 계산. **`pragma unroll`** 보충:
 
@@ -115,7 +115,7 @@ mma 특수화 인자, threadblock 계산 흐름(single 1 / pipelined 2 / multist
 
 너무 깊이는 안 들어가지만, warp 내 mma 계산 방법·각 thread 작성 방법은 본질적으로 명령 응용. **global load 디테일** 주목:
 
-![memory_sm80.h의 global load 디테일](images/v2-1de92826a1c068a82d1e92ab5444d1c3_1440w.jpg)
+![memory_sm80.h의 global load 디테일](images/B34_cutlass_software_architecture/v2-1de92826a1c068a82d1e92ab5444d1c3_1440w.jpg)
 
 `@p`는 이전 글에서 언급한 **special register로 load 필요 여부 판단**.
 
@@ -141,6 +141,6 @@ ncu -o xxx --import-source 1 --set full ./a.out
 
 NVIDIA 공식 사이트에서 Nsight Compute GUI 다운로드·설치 후 report 열기.
 
-![report detail 페이지](images/v2-33a3068d443dcc44e837ae033e27dd1f_1440w.jpg)
+![report detail 페이지](images/B34_cutlass_software_architecture/v2-33a3068d443dcc44e837ae033e27dd1f_1440w.jpg)
 
 detail 페이지에서 다양한 metrics(HW 활용률·명령 카운트 등) 확인. 분석 지식은 별도 글에서 다룰 예정.

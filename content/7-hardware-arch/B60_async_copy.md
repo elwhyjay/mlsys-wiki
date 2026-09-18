@@ -8,7 +8,7 @@ CUDA는 NVIDIA GPU용 C 계열 프로그래밍 모델입니다. CUDA 스레드�
 
 thread는 가장 기본적인 프로그래밍 추상이자 실행 단위입니다. 한 thread block 내의 thread 수는 아키텍처가 제약합니다. 같은 block의 thread는 같은 SM에서 실행되어 자원 분할(공유 메모리 등)을 공유하고, 공유 메모리·배리어 동기화로 통신할 수 있습니다. 런타임에는 한 thread block은 한 SM에서만 동작하지만, SM은 block 단위가 아니라 warp 단위로 관리합니다. 한 block은 여러 warp로 나뉘고 각 warp는 보통 32 thread를 포함합니다. 같은 warp의 thread는 SIMT(Single Instruction Multiple Threads) 방식으로 같은 명령을 다른 데이터에 대해 실행합니다. warp scheduler는 매 사이클 준비된 명령 하나를 골라 전용 산술 명령 유닛에 발사합니다. 레지스터 파일·데이터 캐시·공유 메모리는 block 사이에서 분할되므로 warp 전환 비용이 없습니다. 여러 block이 모여 grid가 됩니다. grid는 디바이스의 활성 CUDA 커널 프로그램에 해당하며, 같은 grid의 모든 block은 thread 수가 같습니다. CUDA 런타임은 block을 SM에, grid를 GPU에 스케줄합니다. 한 grid가 여러 SM을 점유할 수 있습니다. 디바이스의 모든 thread는 소속 block과 무관하게 global memory에 접근할 수 있습니다. global memory는 용량이 가장 크지만 지연이 높고 처리량은 낮습니다. CUDA의 스레드 계층, 메모리 계층, 하드웨어 자원 계층의 대응 관계는 아래와 같습니다.
 
-![CUDA 계층 대응](images/v2-709578c089a88c17d72b0982e41c01fe_1440w.jpg)
+![CUDA 계층 대응](images/B60_async_copy_memory_barrier/v2-709578c089a88c17d72b0982e41c01fe_1440w.jpg)
 *CUDA 스레드/메모리/하드웨어 자원 계층 대응*
 
 커널 프로그램은 보통 copy-and-compute 패턴으로 실행합니다. 즉 global memory에서 데이터를 가져와 공유 메모리에 저장한 뒤 계산하고, 결과(있다면)를 global memory에 다시 씁니다. NVIDIA Ampere부터 CUDA 프로그래밍 모델은 비동기 프로그래밍 모델로 메모리 연산을 가속합니다. 비동기 모델은 CUDA 스레드와 관련된 비동기 연산(스레드 간 동기를 위한 비동기 배리어와, global memory에서 비동기로 데이터를 옮기는 비동기 copy)을 정의합니다.
@@ -36,7 +36,7 @@ NVIDIA가 2020년 5월 Ampere에서 도입한 새로운 비동기 복사(Async C
 
 비동기 복사를 사용하는 커널은 보통 소프트웨어 파이프라이닝과 협력합니다. 소프트웨어 파이프라이닝은 copy-and-compute 메인 루프를 여러 파이프라인 단계로 나눕니다. 상류 단계가 데이터를 적재하는 동안 하류 단계는 (이전 상류 단계가 적재해 둔 피연산자로) 계산을 수행할 수 있습니다. 이 구조에서 SM이 현재 계산을 위해 공유 메모리 데이터를 쓰는 동안 thread block은 다음 배치(batch) 계산용 데이터를 global memory에서 읽어야 합니다. 따라서 공유 메모리 레벨에서 double buffering을 두어 상류 단계가 공유 메모리에 쓰는 동시에 하류 단계가 공유 메모리에서 적재할 수 있게 합니다. block의 각 thread는 현재 배치 데이터에서 1개 이상의 원소를 복사하고, 모든 thread가 동기화(`_syncthreads` 또는 `cooperative_group::sync`)로 복사 완료를 기다립니다.
 
-![소프트웨어 파이프라인](images/v2-3f0e6e25664a8893849d5d5e9ad1a1a7_1440w.jpg)
+![소프트웨어 파이프라인](images/B60_async_copy_memory_barrier/v2-3f0e6e25664a8893849d5d5e9ad1a1a7_1440w.jpg)
 *소프트웨어 파이프라인*
 
 이 구조에서 각 thread는 `cuda::memcpy_async`를 1회 이상 호출해 현재 배치의 비동기 복사를 제출하고, 모든 thread가 이미 제출된 복사 완료를 기다립니다. 이 방식으로 여러 배치를 동시에 이동·계산할 수 있어, AI 모델의 대형 데이터 구조에 매우 유리합니다. 대형 구조를 N개 배치로 나누면, block은 N단계의 비동기 복사를 제출해 N개 배치를 파이프라인 반복 처리할 수 있고, 컴파일러의 동적 루프 언롤도 피할 수 있습니다. 비동기 복사 사용 예:
@@ -74,7 +74,7 @@ L1 캐시 접근 여부에 따라 비동기 복사는 두 가지 모드로 나�
 - (b) BYPASS 모드. global 데이터가 L1·레지스터를 우회해 global → L2 → shared로 직접 복사.
 - (c) ACCESS 모드. global 데이터를 L1 캐시에 보관해 재사용성을 확보한 뒤 shared로 복사.
 
-![비동기 복사 모드](images/v2-a3e7c0d68173a4b412049e2f0e6c42a5_1440w.jpg)
+![비동기 복사 모드](images/B60_async_copy_memory_barrier/v2-a3e7c0d68173a4b412049e2f0e6c42a5_1440w.jpg)
 *비동기 복사 모드*
 
 - `.cg`: L2에서만 캐시, L1 캐시는 사용하지 않음
@@ -124,7 +124,7 @@ cp.async.commit_group;  // End of group 2
 cp.async.wait_group 1;  // group 0과 1 완료 대기
 ```
 
-![명령 실행 순서](images/v2-54394200158d3692d5f07dddcfb71eb5_1440w.jpg)
+![명령 실행 순서](images/B60_async_copy_memory_barrier/v2-54394200158d3692d5f07dddcfb71eb5_1440w.jpg)
 *명령 실행 순서*
 
 `cp.async.wait_all`은 `cp.async.commit_group + cp.async.wait_group 0`을 합친 것에 해당:
@@ -163,7 +163,7 @@ for (size_t batch = 0; batch < batch_sz; ++batch) {
 
 비동기 배리어는 단일 단계(single-stage) 배리어와 동일한 기능을 제공하지만, 어떤 스레드의 *arrive*(도착) 통지와 다른 스레드의 *wait*(대기)가 분리돼 있다는 점이 다릅니다. 분리 덕분에 도착 후 배리어와 무관한 다른 일을 할 수 있어 대기 시간을 더 효율적으로 활용하고 실행 효율을 높입니다.
 
-![단일/비동기 배리어 비교](images/v2-e3d872a2b761f8552448ce5eac6c5be7_1440w.jpg)
+![단일/비동기 배리어 비교](images/B60_async_copy_memory_barrier/v2-e3d872a2b761f8552448ce5eac6c5be7_1440w.jpg)
 *단일 vs 비동기 배리어*
 
 (a) 단일 단계 배리어는 arrive와 wait이 합쳐져 있어, 데이터 복사 단계의 지연이 block 내 가장 느린 스레드에 종속됩니다. 도착한 스레드는 가장 느린 스레드를 기다리는 동안 다른 명령을 못 합니다. (b) 비동기 배리어는 arrive와 wait이 분리돼 있어, 일찍 도착한 스레드가 데이터가 준비됐다고 비동기 배리어에 통지한 뒤 SM이 동기와 무관한 다른 병렬 작업을 계속 수행할 수 있습니다. 이런 파이프라인 방식의 비동기 처리로 고지연 연산을 가릴 수 있습니다. 비동기 배리어의 wait 동작은 단일 단계 배리어와 비슷하게 하드웨어에 통지해 다른 참가 스레드와 동기화해야 하지만, 비동기 배리어의 wait에는 태그가 붙습니다. 어떤 배리어 종류든 block 내 모든 warp의 동기는 SM이 제어합니다.
@@ -172,7 +172,7 @@ for (size_t batch = 0; batch < batch_sz; ++batch) {
 
 비동기 배리어 메커니즘에선 서로 다른 스레드·warp가 서로 다른 배리어 포인트(barrier point)에 참여할 수 있으므로, SM은 각 포인트별로 참가 스레드·warp를 담은 태그를 여러 개 유지해야 합니다. 예를 들어 n+1개의 배리어 포인트가 있을 때 포인트 0의 참가 스레드 id는 `x₀ ~ y₀`, 포인트 1은 `x₁ ~ y₁` 처럼 각자 태그에 기록됩니다.
 
-![배리어 포인트와 태그](images/img_001.jpg)
+![배리어 포인트와 태그](images/B60_async_copy_memory_barrier/img_001.jpg)
 *배리어 포인트와 태그*
 
 (미완성)

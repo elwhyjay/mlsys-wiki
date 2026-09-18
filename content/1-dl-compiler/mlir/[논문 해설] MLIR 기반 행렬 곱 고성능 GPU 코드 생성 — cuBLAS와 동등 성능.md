@@ -19,7 +19,7 @@
 
 # 0x1. 제목
 
-![이미지](images/img_01.png)논문 제목 및 저자 정보
+![이미지](images/mlir_gpu_matmul_paper/img_01.png)논문 제목 및 저자 정보
 
 이 논문의 제목은 "MLIR 기반 행렬 곱(matrix multiplication) 고성능 GPU 코드 생성: 초기 결과(High Performance GPU Code Generation for Matrix-Matrix Multiplication using MLIR: Some Early Results)"입니다. 이는 향후 추가 실험이나 보충 정보를 통해 논문이 더욱 정교해질 수 있음을 시사합니다. 저자들은 PolyMage Labs와 인도 공과대학교(IIT) 소속입니다.
 
@@ -76,7 +76,7 @@ MLIR에 대한 소개는 여기서 자세히 다루지 않겠습니다. 제가 �
 
 GPU는 범용 대규모 병렬 컴퓨팅 장치입니다. 메모리 및 계산 계층 구조는 모든 애플리케이션을 최적화하여 고성능을 달성하는 데 중요한 역할을 합니다. 우리는 GPU 메모리를 4단계 계층 구조로 추상화할 수 있습니다: global memory, L2-cache, 구성 가능한 L1-cache(shared memory), 그리고 register. GPU의 프로세서도 두 단계 계층 구조로 추상화할 수 있습니다. 즉, Streaming Multiprocessor(SM)와 SM 내부의 계산 코어입니다. 계산 코어는 보통 CUDA Core라고도 불립니다. CUDA Core 외에도 Tensor Core라는 특수 유닛이 최신 GPU에서 CUDA Core와 같은 수준의 계산 계층 구조에 등장합니다. 각 SM은 각자의 warp scheduler를 가진 처리 블록으로 더 세분화됩니다. GPU 프로그래밍 모델의 구조는 현재 프로세서 계층 구조와도 일치합니다. thread는 GPU에서 다른 thread와 병렬로 실행할 수 있는 단일 실행 엔티티입니다. 이러한 thread들은 32개 단위로 묶여 warp라고 불립니다. warp는 SM의 계산 코어에서 lock-step 방식으로 실행됩니다. warp scheduler는 실행 준비가 된 warp를 선택하여 compute core로 디스패치합니다. warp가 데이터 의존성을 만나면 정지하고, warp scheduler는 실행 준비가 된 다른 warp를 선택합니다.
 
-![이미지](images/img_02.png)Fermi 아키텍처 SM의 구조![이미지](images/img_03.png)warp scheduler의 간략한 작동 과정 (Fermi 아키텍처 예시). 여기서 말하는 그림 1은 위의 SM 구조도입니다.
+![이미지](images/mlir_gpu_matmul_paper/img_02.png)Fermi 아키텍처 SM의 구조![이미지](images/mlir_gpu_matmul_paper/img_03.png)warp scheduler의 간략한 작동 과정 (Fermi 아키텍처 예시). 여기서 말하는 그림 1은 위의 SM 구조도입니다.
 
 SM에서 처리해야 하는 block의 수에 따라 여러 warp가 병렬로 실행될 수 있습니다. 따라서 일반적으로 더 많은 warp는 (i) warp 수준의 parallel, (ii) 더 나은 latency 숨김, (iii) 기본 리소스의 더 나은 활용을 달성하는 데 도움이 됩니다. 이제 이러한 warp들은 thread block으로 더 그룹화됩니다. GPU에서 여러 thread block이 병렬로 실행될 수 있습니다. 하나의 thread block은 하나의 SM에 바인딩됩니다. 실행 수명 동안 SM을 변경할 수 없으며, 동일한 SM에서 실행을 완료해야 하고, 완료 시 할당된 모든 리소스를 해제해야 합니다. 같은 warp의 thread들은 warp 수준 shuffle 명령어를 사용하여 데이터를 교환할 수 있습니다. 같은 thread block 내의 모든 thread는 low-latency shared memory를 사용하여 통신할 수 있으며, 다른 thread block의 thread들은 high-latency global memory를 사용하여 통신해야 합니다. 동기화 primitive는 thread block과 warp 수준에 존재합니다. 사용되는 동기화 유형에 따라, 동기화는 thread block 또는 warp 내의 어떠한 thread도 모든 thread가 동기화 지점에 도달할 때까지 다음 명령어로 진행하지 않도록 보장합니다. 데이터를 먼저 shared memory에 쓰고 모든 thread가 읽는 경우 동기화를 사용하는 것이 필수적입니다. shared memory 버퍼를 읽고 쓰기 전에, 정확성을 보장하기 위해 모든 thread가 동기화되어야 합니다.
 
@@ -88,7 +88,7 @@ Tensor Core는 NVIDIA GPU에 있는 프로그래밍 가능한 matrix multiplicat
 
 프로그래밍 가능성 측면에서 Tensor Core를 활용하는 세 가지 방법이 있습니다: (i) cuBLAS 같은 고수준 라이브러리 사용, (ii) CUDA에서 WMMA[1]와 같은 고수준 C++ API로 프로그래밍, 또는 (iii) 어셈블리 수준 명령어를 사용하여 명시적으로 프로그래밍.
 
-![이미지](images/img_04.png)Tensor Core를 프로그래밍하는 다양한 방법 비교
+![이미지](images/mlir_gpu_matmul_paper/img_04.png)Tensor Core를 프로그래밍하는 다양한 방법 비교
 
 cuBLAS 사용은 인터페이스 호출만 필요하지만, 다른 두 가지 방법은 상당한 프로그래밍 작업을 필요로 합니다. WMMA API는 큰 행렬 연산과 행렬을 load 및 store하기 위한 유틸리티 함수를 제공합니다. 이러한 API 함수를 GPU 마이크로아키텍처별 어셈블리 명령어로 변환하는 작업도 NVIDIA의 전용 컴파일러로 위임됩니다. WMMA API를 사용하여 load된 행렬은 register에 load된 후 불투명한 레이아웃을 가집니다. 즉, 어떤 thread가 load된 행렬의 어떤 요소를 가지고 있는지(thread-data 매핑) 알 수 없습니다. 이러한 불투명한 특성 때문에 `bias_add`와 같이 thread-data 매핑을 알아야 하는 연산과 fusion할 때 추가 단계가 필요합니다. 어셈블리 명령어를 사용하여 Tensor Core를 명시적으로 프로그래밍하는 것은 더욱 어렵습니다. 프로그래머가 register의 thread-data 매핑이나 shared memory와 register 간의 데이터 이동과 같은 복잡성을 다루어야 하기 때문입니다. 위의 Table 1은 이러한 방법들을 요약합니다.
 
@@ -98,13 +98,13 @@ LLVM의 NVPTX backend는 WMMA API 함수를 `intrinsics`로 노출합니다. 이
 
 이 섹션에서는 pipeline의 설계를 소개합니다. 우리의 pipeline은 GPU에서 고성능 matmul의 레시피를 구성하는 일련의 최적화 및 변환을 기반으로 합니다. 우리가 사용하는 방법은 이전 일부 연구에서 강조된 것과 매우 유사합니다. 이러한 방법들의 공통적인 부분은 메모리 계층 구조의 다양한 수준에서 재사용을 최대화하기 위한 2단계 blocking입니다. 일반적인 방법은 알고리즘 1에 설명되어 있습니다.
 
-![이미지](images/img_05.png)알고리즘 1
+![이미지](images/mlir_gpu_matmul_paper/img_05.png)알고리즘 1
 
 우리의 작업 이전에는 MLIR에서 일부 지원이 제공되었으며, 우리는 pipeline에서 이러한 지원을 재사용했지만 일부 핵심 구성 요소가 누락되어 있었습니다. 주로 MLIR에서 WMMA API를 사용하여 Tensor Core를 프로그래밍하는 데 필요한 연산이 없었으며, 우리가 이러한 연산을 도입했습니다. 필요할 때마다 기존 MLIR 인프라를 변경하고 추가합니다.
 
 Figure 1은 우리가 채택한 lowering 경로를 보여주며, 이는 알고리즘 1을 기반으로 합니다. 동일한 목표를 달성하기 위한 다양한 lowering 경로가 있을 수 있지만, 생성된 타겟 kernel이 affine이기 때문에 Affine Dialect를 통한 lowering 경로를 선택해야 한다고 생각합니다. 이는 빠른 메모리 버퍼의 생성 및 배치, loop-tiling, unroll-jam, vectorize, parallel 루프 감지 및 동기화 barrier 배치 등 여러 측면에서 도움이 될 수 있습니다.
 
-![이미지](images/img_06.png)Figure 1
+![이미지](images/mlir_gpu_matmul_paper/img_06.png)Figure 1
 
 알고리즘 1에서는 간결성을 위해 강조하지 않았지만, 다음과 같은 추가적인 최적화 집합을 사용해야만 고성능을 달성할 수 있다는 점은 주목할 만합니다: (i) bank conflict를 줄이기 위해 shared memory 버퍼에 padding을 추가, (ii) register tiling 또는 warp tiling, (iii) load-store vectorize, (iv) global memory load latency 숨김. 이제 우리의 lowering pipeline을 자세히 설명하면서 주요 최적화를 어떻게 활성화하는지 논의하겠습니다.
 
@@ -112,13 +112,13 @@ Figure 1은 우리가 채택한 lowering 경로를 보여주며, 이는 알고�
 
 본 논문 코드 생성 흐름의 시작점은 `lmhlo.dot`이나 `linalg.matmul`과 같은 high-level 연산이거나, 사용자 대상 프로그래밍 모델에서 생성된 linalg dialect IR 내의 `linalg.matmul`입니다. 전자의 경우, 연산을 3중 루프 affine matmul로 lowering할 수 있고, 후자의 경우 3중 루프 affine matmul을 직접 생성할 수 있습니다. 시작점은 Listing 1과 같습니다:
 
-![이미지](images/img_07.png)Listing 1. 단순한 affine matmul
+![이미지](images/mlir_gpu_matmul_paper/img_07.png)Listing 1. 단순한 affine matmul
 
 ## 0x6.2 지역성과 병렬성을 위한 tiling
 
 잘 알려져 있듯이, tiling을 위한 적절한 매개변수가 선택되면 데이터 재사용에 도움이 되고 성능을 크게 향상시킵니다. GPU에서 최적의 성능을 달성하기 위해서는 2단계 tiling이 필수적입니다. 첫 번째 단계의 tiling은 서로 다른 thread block에 매핑되며, 각 thread block은 행렬 A와 B의 tile을 global memory에서 shared memory로 복사하여 high-latency global memory에 여러 번 접근하는 것을 방지합니다. 분할된 tile이 서로 다른 thread block에 매핑되기 때문에, 서로 다른 SM에서 병렬로 계산할 수 있습니다. 두 번째 단계의 tiling은 register의 재사용을 촉진하고 warp 수준의 parallel에 도움이 됩니다. thread block 수준의 tile은 warp 간에 분할되며, 각 warp는 자신에게 매핑된 tile의 일부에서만 작동합니다. 이 단계는 우리에게 2단계 tiling 구조를 제공합니다. Listing 2에서 이 두 단계 Tiling의 구체적인 구조를 볼 수 있습니다:
 
-![이미지](images/img_08.png)빨간색과 노란색 부분은 각각 메모리 수준과 warp 수준의 tiling입니다.
+![이미지](images/mlir_gpu_matmul_paper/img_08.png)빨간색과 노란색 부분은 각각 메모리 수준과 warp 수준의 tiling입니다.
 
 > Loop Tiling은 루프를 최적화하는 매우 중요한 전략입니다. 그리고 딥러닝에서 matrix multiplication과 같은 계산 집약적인 operator는 본질적으로 3개의 루프로 구성되어 있기 때문에 Loop tiling은 이 논문의 최적화에서 매우 중요한 역할을 합니다. 간단히 말해, Loop Tiling은 분할(blocking)을 통해 Cache Miss를 줄이고 데이터 evict로 인한 성능 저하를 낮추는 것입니다. 더 자세히 알고 싶다면 https://zhuanlan.zhihu.com/p/477023757 글이나 TVM의 Loop Tiling 소개를 참고하세요.
 
@@ -136,7 +136,7 @@ shared memory 생성은 그 일부에 불과하며, shared memory 접근이 최�
 
 이제 필요한 모든 기본 요소를 갖췄으므로 `gpu.subgroup_mma` op를 계속 생성할 수 있습니다. WMMA 연산에는 다양한 크기가 있으며, 본 작업에서는 특정 버전의 연산을 사용합니다. 여기서 생성하는 연산은 이미 존재하는 스칼라 연산을 대체해야 하며, 해당 루프의 루프 step도 그에 맞게 조정해야 합니다.
 
-![이미지](images/img_09.png)tiling 및 padded shared memory 이후 WMMA 연산을 사용한 matmul op
+![이미지](images/mlir_gpu_matmul_paper/img_09.png)tiling 및 padded shared memory 이후 WMMA 연산을 사용한 matmul op
 
 이제 WMMA 연산을 생성했으므로 다음 IR 변환을 수행합니다:
 
@@ -152,7 +152,7 @@ shared memory 생성은 그 일부에 불과하며, shared memory 접근이 최�
 
 > unroll-jam에 대해서는 천칭양(Chen Qingyang)의 글을 참고하세요: https://zhuanlan.zhihu.com/p/392892255
 
-![이미지](images/img_10.png)루프 unroll 및 불변 load-store 끌어올리기 후의 Affine Matmul
+![이미지](images/mlir_gpu_matmul_paper/img_10.png)루프 unroll 및 불변 load-store 끌어올리기 후의 Affine Matmul
 
 위의 최적화 후 루프 구조는 Listing 3에 나타나 있습니다. C 행렬에 대한 불변 load-store 쌍을 이동한 후 루프 구조에 어떠한 변화가 일어났는지 주의해야 합니다. 20번 줄의 `affine.for` 연산은 main k loop를 나타내며, 이제 C operand의 load를 루프 `iter_args`로 사용하도록 수정되었습니다. 이는 이 루프 내에서 발생하는 곱셈의 누적기로 사용됩니다. 매 iteration 후, 이 k loop는 누적된 결과를 생성하고 이러한 결과를 `iter_args`로 다음 iteration에 전달합니다. 이러한 `iter_args`는 register에 상주하며, k loop의 다양한 iteration 사이에서 반복 사용됩니다.
 
@@ -160,7 +160,7 @@ shared memory 생성은 그 일부에 불과하며, shared memory 접근이 최�
 
 이전 섹션에서 `gpu.subgroup_mma` op 및 기타 일부 최적화를 도입함에 따라, 최종 IR의 구조에 가까워지고 있습니다. 우리는 자체적으로 GPU 특정 정보가 없는 Affine Dialect에서 가능한 한 많은 최적화를 수행하는 데 중점을 둡니다. 현재 IR에서는 A와 B의 shared memory에 load되기 전에는 계산을 시작할 수 없습니다. latency 측면에서, global memory load는 가장 비용이 많이 드는 연산 중 하나이므로 operand의 긴 대기 시간을 제거하는 것이 매우 중요합니다. main k-loop 또는 thread block k-loop를 분할하여 0번째 iteration에서 A와 B의 사본을 가져오고 n-1번의 iteration 동안 계산을 통과시킴으로써 이를 달성합니다. 사본은 k-loop 앞에 배치되고 계산이 그 뒤를 잇습니다. 매 iteration 시 해당 루프에서 실행되는 계산의 인덱스도 한 번 앞으로 이동해야 합니다. 결과적으로 계산은 shared memory에 이미 사용 가능한 데이터에서 발생하고, 다음 iteration의 load도 이미 발행되었습니다(이는 사실 PyTorch DataLoader와 같은 prefetch와 비슷합니다). 우리는 Listing 4에서 이 IR의 구조를 보여줍니다.
 
-![이미지](images/img_11.png)shifted k-loop를 사용한 matmul
+![이미지](images/mlir_gpu_matmul_paper/img_11.png)shifted k-loop를 사용한 matmul
 
 이는 latency 숨김의 토대를 마련하지만, 이를 실현하려면 shared memory로의 store와 global memory로의 load를 분리해야 하며, 이는 thread block k-loop 내의 copy 루프에 편리합니다. 이는 최적화의 정확성과 기능 모두에 필요합니다. 이를 위해 copy loop를 unroll하고, k-loop 외부의 끝부분으로 store를 지연시킵니다. 활성화하려면 일부 GPU 특정 정보가 필요하기 때문에 이 최적화는 pipeline의 다른 시점으로 지연시킵니다.
 
@@ -174,7 +174,7 @@ latency 숨김이 작동하지만, 실제 copy를 더 빠르게 실행할 수는
 
 우리는 MLIRX [24]에 이미 존재하는 vectorize 유틸리티를 사용합니다. 이 유틸리티를 global에서 shared memory로의 copy에 호출합니다. 이 유틸리티를 사용하여 다양한 벡터 너비를 시도할 수 있습니다. 우리는 32, 64 및 128비트 너비의 벡터를 시도했으며, 128비트 너비의 벡터가 가장 잘 작동한다는 것을 발견했습니다. vectorize된 copy 루프는 Listing 5에 나타나 있습니다:
 
-![이미지](images/img_12.png)vectorize된 copy 루프
+![이미지](images/mlir_gpu_matmul_paper/img_12.png)vectorize된 copy 루프
 
 > Listing 4와 비교할 수 있습니다. 여기에는 vectorize 연산을 위한 vector_cast가 있습니다.
 
@@ -192,7 +192,7 @@ latency 숨김이 작동하지만, 실제 copy를 더 빠르게 실행할 수는
 
 0x6.5절에서 우리는 latency 숨김을 설명하고 결론을 내렸지만, load와 store를 분리할 때까지 이를 완성할 수 없다고 했습니다. 코드 복잡성을 도입하지 않고 이를 달성하기 위해, 먼저 thread block k-loop 내에서 copy 루프를 완전히 unroll한 다음, 계산이 완료된 후 store가 발생하도록 store를 지연시킵니다. Listing 6에서 IR의 일반적인 구조를 보여주며, 우리가 따른 방법은 [4]에서 언급된 것과 매우 유사합니다.
 
-![이미지](images/img_13.png)Global Memory load latency 숨김
+![이미지](images/mlir_gpu_matmul_paper/img_13.png)Global Memory load latency 숨김
 
 이것이 우리의 최적화의 종점이며, SCF Dialect에서의 마지막 단계입니다.
 
@@ -227,11 +227,11 @@ latency 숨김이 작동하지만, 실제 copy를 더 빠르게 실행할 수는
 
 우리가 달성한 성능은 cuBLAS 11.2의 95-119% 범위 내에서 일관되게 나타났습니다. 우리의 성능을 장치의 절대 peak와 비교하면, 우리는 장치 peak의 95.4%를 유지합니다. Figure 2는 Ampere RTX 3090에서 자동 생성된 kernel의 성능을 보여줍니다. 그림은 우리의 결과가 cuBLAS에 매우 가깝다는 것을 보여줍니다. 일부 작은 크기에서, 우리의 성능은 cuBLAS를 능가합니다. 일반적으로, cuBLAS kernel은 작은 크기에 대한 튜닝이 큰 크기에 대한 성능만큼 좋지 않을 수 있습니다. 큰 크기에서, MLIR 생성 코드의 성능은 cuBLAS 성능의 2-8% 범위 내에 있습니다. 작은 thread block 크기는 작은 문제 크기에서 더 잘 수행된다는 것이 추가로 관찰됩니다. 이는 작은 문제 크기가 증가된 occupancy로부터 이익을 얻는다는 것을 시사합니다. 이는 작은 문제 크기가 occupancy 증가로부터 이익을 얻는다는 것을 시사합니다(occupancy는 각 multiprocessor(Streaming Multiprocessor, SM)의 활성 warp 수와 실제 활성 warp 수의 비율을 의미합니다. 높은 occupancy가 반드시 성능을 향상시키는 것은 아니지만, 낮은 occupancy는 메모리 latency 숨김의 효과를 떨어뜨립니다). 작은 tile 크기는 shared memory에서 A와 B의 재사용을 줄이지만, occupancy를 증가시키며, 이는 비교적 적은 수의 thread block을 시작할 가능성이 있는 작은 문제 크기에 유리합니다. 큰 size에서, tile 크기가 너무 작으면 비교적 많은 작은 thread block이 발생하여 데이터 재사용의 효과 감소가 더 두드러지고, occupancy는 더 이상 명확한 이득이 없습니다.
 
-![이미지](images/img_14.png)정사각형 크기 행렬에서의 mixed precision 성능
+![이미지](images/mlir_gpu_matmul_paper/img_14.png)정사각형 크기 행렬에서의 mixed precision 성능
 
 자동 코드 생성 방법은 또한 우리가 개별 최적화의 영향을 선택적으로 활성화 또는 비활성화하여 연구할 수 있게 합니다. 우리는 Figure 3에서 원래 버전부터 완전히 최적화된 버전까지 앞서 논의된 각 최적화의 영향을 점진적으로 보여줍니다.
 
-![이미지](images/img_15.png)각 최적화가 성능에 미치는 영향을 통제 변수 방식으로 테스트
+![이미지](images/mlir_gpu_matmul_paper/img_15.png)각 최적화가 성능에 미치는 영향을 통제 변수 방식으로 테스트
 
 ## 0x7.2 half precision 성능
 
@@ -239,7 +239,7 @@ latency 숨김이 작동하지만, 실제 copy를 더 빠르게 실행할 수는
 
 우리가 달성한 성능은 cuBLAS 11.2 대비 80~160% 수준으로 일관되게 나타났습니다. 그림 4는 Ampere RTX 3090에서 자동 생성된 kernel의 성능을 보여줍니다. cuBLAS는 전체 범위, 특히 W=8848보다 큰 문제에서 일관되지 않은 성능을 보였습니다. 이는 cuBLAS가 모든 문제 크기에 최적화되어 있지 않음을 시사합니다. 특히 cuBLAS kernel을 분석한 결과, cuBLAS가 선택하는 thread block 크기가 우리가 최적 성능을 달성하는 크기보다 작다는 것을 발견했습니다. 예를 들어, W=11264일 때 cuBLAS는 [특정 값]을 선택하는 반면, 우리는 [특정 값]을 선택했습니다. 우리는 global memory load latency를 숨기기 위해 하나의 pipeline 단계를 사용하는 반면, cuBLAS는 5개의 단계를 사용합니다. cuBLAS의 경우 global memory load 중에 훨씬 더 많은 일시 정지가 발생합니다. 이는 latency 숨김이 최적화되지 않았기 때문일 가능성이 높습니다.
 
-![이미지](images/img_16.png)cuBLAS 및 부동 소수점 peak 값과 함께 FP16으로 자동 생성된 코드의 비교.
+![이미지](images/mlir_gpu_matmul_paper/img_16.png)cuBLAS 및 부동 소수점 peak 값과 함께 FP16으로 자동 생성된 코드의 비교.
 
 > 이것이 대략적인 실험 설정입니다. 실제로는 크기와 정밀도(fp32 대 fp16)에 따라 cuBLAS와 본 논문에서 MLIR 기반으로 자동 생성된 kernel의 성능이 달라집니다. 하지만 전반적으로 본 논문의 코드 자동 생성 방법은 cuBLAS와 같은 하드웨어 제조사에서 제공하는 고성능 라이브러리와 유사한 성능을 달성하며, 이는 매우 훌륭한 결과입니다.
 

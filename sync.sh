@@ -25,6 +25,23 @@ LEETCUDA="$HOME/leetcuda/blogs/ko"
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
+# Several source articles can map into the same content/ directory, and many of
+# them name their figures generically (images/img_01.png). Copied flat, the last
+# mapping line wins and every earlier article renders the wrong figure. So: copy
+# flat while the name is free, and as soon as a name is already taken by a
+# DIFFERENT file, move this article's whole images/ tree under images/<slug>/ and
+# rewrite its own links to match. First mapping line keeps the flat path.
+needs_ns() {
+  local img_dir="$1" img_dst="$2" sub="$3"
+  local f rel existing
+  while IFS= read -r f; do
+    rel="${f#$img_dir/}"
+    existing="$img_dst/$sub/$rel"
+    [ -e "$existing" ] && ! cmp -s "$f" "$existing" && return 0
+  done < <(find "$img_dir" -type f)
+  return 1
+}
+
 cp_file() {
   local src="$1" dst="$2"
   if [[ "$dst" == */ ]] || [ -d "$dst" ]; then
@@ -32,12 +49,23 @@ cp_file() {
   fi
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
-  local src_dir img_dst
+  local src_dir img_dst slug
   src_dir="$(dirname "$src")"
   img_dst="$(dirname "$dst")"
+  slug="$(basename "$src_dir")"
   # images/ or img/ subdirectory
   for img_dir in "$src_dir/images" "$src_dir/img"; do
-    [ -d "$img_dir" ] && rsync -a "$img_dir/" "$img_dst/$(basename "$img_dir")/" || true
+    [ -d "$img_dir" ] || continue
+    local sub; sub="$(basename "$img_dir")"
+    if needs_ns "$img_dir" "$img_dst" "$sub"; then
+      rsync -a "$img_dir/" "$img_dst/$sub/$slug/"
+      # ](images/x.png  ->  ](images/<slug>/x.png   and the same for src="..."
+      sed -i '' -e "s|](${sub}/|](${sub}/${slug}/|g" -e "s|src=\"${sub}/|src=\"${sub}/${slug}/|g" "$dst"
+      NS_COUNT=$((NS_COUNT + 1))
+      printf '  [NS] %s -> %s/%s/\n' "${dst#$CONTENT/}" "$sub" "$slug" >> "$NS_LOG"
+    else
+      rsync -a "$img_dir/" "$img_dst/$sub/"
+    fi
   done
   # sibling image files (e.g. ./img1.webp)
   find "$src_dir" -maxdepth 1 -type f \
@@ -100,6 +128,9 @@ echo "=== Syncing from mapping.tsv ==="
 
 copied=0
 missing=0
+NS_COUNT=0
+NS_LOG="$(mktemp)"
+trap 'rm -f "$MANAGED" "$NS_LOG"' EXIT
 
 while IFS=$'\t' read -r source src_rel wiki_path; do
   # skip comments and blank lines
@@ -133,6 +164,10 @@ while IFS=$'\t' read -r source src_rel wiki_path; do
 done < "$MAPPING"
 
 echo "  Copied: $copied files"
+if [ "$NS_COUNT" -gt 0 ]; then
+  echo "  Namespaced: $NS_COUNT article(s) whose figure names collided"
+  cat "$NS_LOG"
+fi
 [ "$missing" -gt 0 ] && echo "  Missing in source: $missing files (check mapping.tsv)"
 
 # ── unclassified: mirror source structure, skip already-mapped files ────────

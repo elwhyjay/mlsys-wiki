@@ -18,7 +18,7 @@ https://github.com/DefTruth/lite.ai.toolkit
 
 글 자체로 돌아온다. 지난번에는 MGMatting algorithm principle과 핵심 C++ porting logic을 자세히 소개하는 글을 썼다. 하지만 실제로 어떻게 응용하는지에 대한 case가 부족했다. 이 짧은 글은 그 빈 부분을 메우기 위한 것이다. MGMatting portrait matting 원리를 알고 싶다면 이전 글을 보면 된다. 긴 글이다.
 
-![](images/img_001.png)
+![](images/A52_mgmatting_background_matting/img_001.png)
 
 DefTruth: MGMatting(CVPR2021) MNN, TNN, ONNXRuntime C++ porting 상세 기록.
 
@@ -26,7 +26,7 @@ DefTruth: MGMatting(CVPR2021) MNN, TNN, ONNXRuntime C++ porting 상세 기록.
 
 Lite.AI.ToolKit C++ toolkit으로 MGMatting portrait matting case를 실행한다. repository는 https://github.com/DefTruth/lite.ai.toolkit 이고, ONNXRuntime C++, MNN, TNN version을 포함한다.
 
-![](images/v2-bb9f6175e4f4b2c8a338184163ea6fad_1440w.jpg)
+![](images/A52_mgmatting_background_matting/v2-bb9f6175e4f4b2c8a338184163ea6fad_1440w.jpg)
 
 example code는 repository에 있다. 유용하다고 느끼면 star로 지원해도 된다.
 
@@ -53,19 +53,19 @@ ONNXRuntime C++, MNN, TNN version inference implementation은 모두 test를 통
 
 제공한 link에서 download할 수 있다. Baidu Drive code: `8gin`.
 
-![](images/v2-5a8e8dd86444986c2f03cce6b6e2f9de_1440w.png)
+![](images/A52_mgmatting_background_matting/v2-5a8e8dd86444986c2f03cce6b6e2f9de_1440w.png)
 
 ### 3.2 MNN model file
 
 MNN model file download address. Baidu Drive code: `9v63`.
 
-![](images/v2-8be09fa513d0695cc4e93da559bdcdea_1440w.jpg)
+![](images/A52_mgmatting_background_matting/v2-8be09fa513d0695cc4e93da559bdcdea_1440w.jpg)
 
 ### 3.3 TNN model file
 
 TNN model file download address. Baidu Drive code: `6o6k`.
 
-![](images/v2-4ac5e1aa59d0ea9eeb5279a46eb33a8f_1440w.jpg)
+![](images/A52_mgmatting_background_matting/v2-4ac5e1aa59d0ea9eeb5279a46eb33a8f_1440w.jpg)
 
 ## 4. interface document
 
@@ -220,7 +220,7 @@ static void test_tnn()
 
 - output result:
 
-![](images/v2-bb9f6175e4f4b2c8a338184163ea6fad_1440w.jpg)
+![](images/A52_mgmatting_background_matting/v2-bb9f6175e4f4b2c8a338184163ea6fad_1440w.jpg)
 
 ## 6. compile and run
 

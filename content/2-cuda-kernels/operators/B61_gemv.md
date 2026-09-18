@@ -8,7 +8,7 @@
 
 gemv 알고리즘부터. 행렬 A와 벡터 x가 주어지면 gemv는 둘의 곱을 계산합니다.
 
-![gemv](images/img_001.png)
+![gemv](images/B61_gemv_optimization/img_001.png)
 *gemv*
 
 ## 2. shape별 병렬 알고리즘 설계
@@ -19,7 +19,7 @@ GPU에서 병렬 알고리즘 설계란 **block과 thread의 워크로드를 설
 
 각 block을 256 thread, 즉 4 warp로 두고, 각 warp가 한 행을 담당하게 합니다. 각 warp는 x에 접근한 뒤 warp 내부 reduce sum을 수행합니다.
 
-![n=32](images/v2-03564c01e13902a83b06816d606eaad3_1440w.jpg)
+![n=32](images/B61_gemv_optimization/v2-03564c01e13902a83b06816d606eaad3_1440w.jpg)
 *n=32*
 
 ```cuda
@@ -66,7 +66,7 @@ __global__ void Sgemv_v0(
 
 마찬가지로 warp 하나가 한 행을 담당. 한 행 원소가 많으므로 `float4` 벡터화 적재로 접근 효율을 더 끌어올립니다.
 
-![n=128](images/v2-487bfe94a23214bbb64a96a23fb66950_1440w.jpg)
+![n=128](images/B61_gemv_optimization/v2-487bfe94a23214bbb64a96a23fb66950_1440w.jpg)
 *n=128*
 
 ```cuda
@@ -109,7 +109,7 @@ __global__ void Sgemv_v1(
 
 n = 16인 경우, warp 하나가 두 행을 담당. warp0을 예로 들면 0~15번 thread가 행 0을, 16~31번 thread가 행 1을 처리.
 
-![n=16](images/img_002.jpg)
+![n=16](images/B61_gemv_optimization/img_002.jpg)
 *n=16*
 
 ```cuda

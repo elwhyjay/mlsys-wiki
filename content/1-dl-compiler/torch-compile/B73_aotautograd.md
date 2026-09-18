@@ -25,11 +25,11 @@ AOTAutograd는 `__torch_dispatch__` 메커니즘을 기반으로 연산자가 di
 
 AOTAutograd를 본격적으로 해석하기 전에 먼저 `__torch_dispatch__` 메커니즘을 이해해야 합니다. **PyTorch의 핵심은 dispatcher이며, 입력 tensor의 속성에 따라 연산자를 구체적인 kernel에 dispatch하는 기능을 합니다.** 예를 들어 tensor의 device 속성에 따라 CUDA kernel을 호출할지 CPU 구현을 호출할지 결정하며, 여러 속성을 종합하여 dispatch key를 산출하여 어떤 kernel을 호출할지 결정합니다. PyTorch에서 하나의 연산자는 여러 번 dispatch를 거치며, **`__torch_dispatch__`는 개발자에게 연산자가 최종 dispatch되기 전에 대응하는 연산자와 입력을 가져올 수 있는 인터페이스를 제공합니다.**
 
-![PyTorch 연산자 dispatch 과정](images/v2-81c3405a4d20499dd9bf9c8ae6e11217_1440w.jpg)
+![PyTorch 연산자 dispatch 과정](images/B73_torch_compile_aotautograd/v2-81c3405a4d20499dd9bf9c8ae6e11217_1440w.jpg)
 
 > 후속 AOTAutograd 구현의 코드 로직은 다음과 같습니다. 관심 있는 분은 뒤의 코드 해석 부분도 참고해 주세요.
 
-![AOTAutograd 호출 함수](images/v2-23db96270eb2815f6d2003ba9ff82792_1440w.jpg)
+![AOTAutograd 호출 함수](images/B73_torch_compile_aotautograd/v2-23db96270eb2815f6d2003ba9ff82792_1440w.jpg)
 
 ## Joint Graph
 

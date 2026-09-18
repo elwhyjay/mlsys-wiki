@@ -27,7 +27,7 @@
 
 원본 버전의 GFLOPs 측정 결과는 다음 그림과 같습니다.
 
-![이미지](images/img_01.png)원본 버전의 GFLOPs 측정 결과
+![이미지](images/gemm_optimize_intro/img_01.png)원본 버전의 GFLOPs 측정 결과
 
 # 2\. 최적화 이전의 작업
 
@@ -84,7 +84,7 @@
 
 cache는 고속 캐시 메모리로 번역되며, **지역성 원리(locality)** 를 잘 활용해 CPU가 메인 메모리에 접근하는 횟수를 줄여줍니다. 컴퓨터의 저장 체계도 간단히 다시 정리해 보면, 현대 컴퓨터에서 메모리는 계층(level)으로 나뉘어 있으며 CPU에 가까울수록 속도가 빠르고 제조 비용이 높으며 용량은 작습니다. CPU에 가장 가까운 것은 register이고, 제조 비용이 가장 높기 때문에 개수도 매우 제한적입니다. 두 번째로 가까운 것이 cache이며, cache도 L1, L2, L3 등 여러 단계로 나뉩니다. 그다음이 메인 메모리, 즉 일반 RAM이고, 마지막은 로컬 디스크입니다. 이들의 용량과 접근 시간은 다음 그림과 같습니다.
 
-![이미지](images/redrawn/img02_memory_hierarchy.png)컴퓨터 저장 계층 구조
+![이미지](images/gemm_optimize_intro/redrawn/img02_memory_hierarchy.png)컴퓨터 저장 계층 구조
 
 위에서 cache가 지역성 원리를 활용한다고 했는데, 지역성 원리란 현재 찾고자 하는 데이터를 CPU에 가까운 저장 구조에서 우선적으로 찾음으로써 데이터 접근 속도를 높이고 프로그램 내 각 변수의 접근 시간을 줄이는 원리를 말합니다.
 
@@ -163,7 +163,7 @@ cache에 관한 더 자세한 개념은 글 말미의 참고 자료 1을 참조�
 
 그렇다면 이 버전의 GFLOPs 성능은 어떨까요? 단일 코어 A53에서의 측정 결과는 다음과 같습니다.
 
-![이미지](images/img_03.png)1x4_8 GFLOPs
+![이미지](images/gemm_optimize_intro/img_03.png)1x4_8 GFLOPs
 
 피크 성능이 원본 버전의 4배까지 올라간 것을 볼 수 있으며, 위의 최적화가 효과적이라는 점을 확인할 수 있습니다.
 
@@ -246,7 +246,7 @@ cache에 관한 더 자세한 개념은 글 말미의 참고 자료 1을 참조�
 
 그리고 다시 GFLOPs를 측정해 봅니다.
 
-![이미지](images/img_04.png)4x4_8의 GFLOPs
+![이미지](images/gemm_optimize_intro/img_04.png)4x4_8의 GFLOPs
 
 이제 GFLOPs가 1.75GFLOPs까지 올라가, 성능이 꽤 좋아진 것처럼 보입니다. 하지만 행렬 크기가 커질수록 성능이 빠르게 떨어지는 문제가 여전히 남아 있습니다. 이 문제는 6절에서 다룹니다.
 
@@ -315,7 +315,7 @@ cache에 관한 더 자세한 개념은 글 말미의 참고 자료 1을 참조�
 
 이 최적화를 적용한 후 현재 버전(`MMult_4x4_10`)의 GFLOPs 성능을 다시 측정해 봅니다.
 
-![이미지](images/img_05.png)4x4_10 GFLOPs
+![이미지](images/gemm_optimize_intro/img_05.png)4x4_10 GFLOPs
 
 행렬의 변의 길이가 200보다 작을 때는 뚜렷한 향상이 있으며, 피크 성능은 2.5GFLOPs까지 올라갔습니다. 이는 행렬 규모가 크지 않을 때 이 최적화가 비교적 효과적임을 보여줍니다.
 
@@ -323,13 +323,13 @@ cache에 관한 더 자세한 개념은 글 말미의 참고 자료 1을 참조�
 
 앞의 두 가지 핵심 최적화는 행렬 규모가 커지면 GFLOPs가 급격히 떨어집니다. 왜 그럴까요?
 
-![이미지](images/img_06.png)Fig6
+![이미지](images/gemm_optimize_intro/img_06.png)Fig6
 
 이는 3절에서 다룬 컴퓨터 저장 계층 구조와 관련이 있으며, Fig6에 나타나 있습니다. A, B 행렬의 크기가 L2 cache보다 작을 때는, 프로그램이 RAM에서 A, B 크기만큼의 메모리를 한 번만 읽어오면 A, B 행렬 데이터를 모두 cache에 담을 수 있습니다. 그러나 행렬 크기가 커져 A, B 행렬의 크기가 L2 cache를 초과하게 되면, row-major일 때의 B 행렬 또는 column-major일 때의 A 행렬이 메모리상 contiguous하지 않기 때문에, 프로그램은 RAM에서 A, B 행렬 데이터를 여러 번 읽어와야 합니다. 이로 인해 데이터 접근이 전체 프로그램 GFLOPs 향상의 병목이 됩니다.
 
 따라서 이 문제를 해결하기 위해 gemm 논문은 핵심을 짚어, matrix multiplication에 대해 다음 그림과 같이 6가지 서로 다른 blocking 방식을 제시했습니다.
 
-![이미지](images/img_07.png)matrix blocking의 여러 분할 방식
+![이미지](images/gemm_optimize_intro/img_07.png)matrix blocking의 여러 분할 방식
 
 이 그림에는 매우 중요한 두 가지 포인트가 담겨 있습니다.
 
@@ -374,7 +374,7 @@ cache에 관한 더 자세한 개념은 글 말미의 참고 자료 1을 참조�
 
 그리고 이 버전(`MMult_4x4_11`)의 GFLOPs를 측정해 봅니다.
 
-![이미지](images/img_08.png)4x4_11 GFLOPs
+![이미지](images/gemm_optimize_intro/img_08.png)4x4_11 GFLOPs
 
 `4x4_10`의 결과와 비교하면, 행렬 규모가 커질 때 이 버전의 GFLOPs가 한층 더 좋아진 것을 확인할 수 있으며, blocking이 cache를 활용하는 좋은 방법임을 보여줍니다. cache 용량이 매우 제한적이라는 점을 감안하면 더욱 그렇습니다.
 
@@ -382,7 +382,7 @@ Figure4에 담긴 두 번째로 매우 중요한 포인트는 **데이터 재배
 
 GFLOPs를 측정해 봅니다.
 
-![이미지](images/img_09.png)4x4_11 GFLOPs
+![이미지](images/gemm_optimize_intro/img_09.png)4x4_11 GFLOPs
 
 `MMult_4x4_11`과 비교했을 때 행렬 규모가 커질 때의 GFLOPs가 크게 향상된 것을 볼 수 있으며, 이 버전의 피크 성능과 큰 차이가 나지 않는 수준까지 도달했습니다. 이 최적화가 매우 효과적임을 보여줍니다.
 

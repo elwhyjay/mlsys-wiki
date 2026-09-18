@@ -83,7 +83,7 @@ Triton 전체 소스 컴파일 과정에서 가장 중요한 두 가지 dependen
     $ cmake ..
     $ make -j8
 
-![이미지](images/img_01.png)
+![이미지](images/triton_mlir_0_compile/img_01.png)
 
 최종적으로 .so 파일, 즉 libtriton.so가 생성된 것을 볼 수 있다.
 
@@ -94,11 +94,11 @@ Triton 전체 소스 컴파일 과정에서 가장 중요한 두 가지 dependen
 
 그런 다음 간단히 import triton을 실행하여 아무 오류도 없으면 Triton으로 개발을 진행할 수 있다.
 
-![이미지](images/img_02.png)
+![이미지](images/triton_mlir_0_compile/img_02.png)
 
 이어서 triton/python/tutorials로 들어가, 아무 예시나 골라 검증해 본다. 여기서는 가장 흔하고 실용적인 03-matrix-multiplication.py를 선택하여, 바로 python 03-matrix-multiplication.py를 실행한다. 잠시 기다리면 최종 결과를 얻을 수 있다.
 
-![이미지](images/img_03.png)
+![이미지](images/triton_mlir_0_compile/img_03.png)
 
 보다시피, Triton이 최종적으로 생성한 코드는 3090에서 single batch gemm의 일부 size에서 이미 cuBLAS를 능가했다.
 
@@ -140,7 +140,7 @@ Triton 전체 소스 컴파일 과정에서 가장 중요한 두 가지 dependen
 
 Triton의 소스 코드를 보면, Triton은 현재 NVIDIA GPU에서 비교적 성숙한 자체 매핑 경로를 가지고 있다. 먼저 Python 언어 layer, 즉 Triton DSL을 추상화하여 AST를 얻고, 그런 다음 AST의 각 노드를 [Triton Dialect](<https://zhida.zhihu.com/search?content_id=227692448&content_type=Article&match_order=1&q=Triton+Dialect&zd_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ6aGlkYV9zZXJ2ZXIiLCJleHAiOjE3NzgzMTY0OTgsInEiOiJUcml0b24gRGlhbGVjdCIsInpoaWRhX3NvdXJjZSI6ImVudGl0eSIsImNvbnRlbnRfaWQiOjIyNzY5MjQ0OCwiY29udGVudF90eXBlIjoiQXJ0aWNsZSIsIm1hdGNoX29yZGVyIjoxLCJ6ZF90b2tlbiI6bnVsbH0.8g6qAKyxNObrq8iR1uukdudYtydkQh9ihxeMNvE-moU&zhida_source=entity>)으로 lowering한다. Triton Dialect는 상위 언어 표현에 비교적 가까운 IR로, 그 주된 역할은 사용자가 해당 알고리즘을 작성할 때 정확성을 유지하기 위함이다. 이어서 [TritonGPU Dialect](<https://zhida.zhihu.com/search?content_id=227692448&content_type=Article&match_order=1&q=TritonGPU+Dialect&zd_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ6aGlkYV9zZXJ2ZXIiLCJleHAiOjE3NzgzMTY0OTgsInEiOiJUcml0b25HUFUgRGlhbGVjdCIsInpoaWRhX3NvdXJjZSI6ImVudGl0eSIsImNvbnRlbnRfaWQiOjIyNzY5MjQ0OCwiY29udGVudF90eXBlIjoiQXJ0aWNsZSIsIm1hdGNoX29yZGVyIjoxLCJ6ZF90b2tlbiI6bnVsbH0.0GDWaTpgu2RBCKXaVOYQ7O4KaXW9vvdolKeNP_lPhYY&zhida_source=entity>)으로 더 매핑된다. TritonGPU Dialect는 GPU 레벨에 더 가까운 IR로, 구체적인 성능 최적화를 위해 설계되었다. 그림에서 다른 파란색 모듈들, 예를 들어 [SCF](<https://zhida.zhihu.com/search?content_id=227692448&content_type=Article&match_order=1&q=SCF&zd_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ6aGlkYV9zZXJ2ZXIiLCJleHAiOjE3NzgzMTY0OTgsInEiOiJTQ0YiLCJ6aGlkYV9zb3VyY2UiOiJlbnRpdHkiLCJjb250ZW50X2lkIjoyMjc2OTI0NDgsImNvbnRlbnRfdHlwZSI6IkFydGljbGUiLCJtYXRjaF9vcmRlciI6MSwiemRfdG9rZW4iOm51bGx9.bMi3noK5w2k3jh0TCF662-eFi4lcX_dTqQIIcnThBbs&zhida_source=entity>), Arith, Tensor 등은 모두 MLIR 생태계에서 이미 구현되어 널리 사용되고 있는 Dialect들이다. 이러한 Dialect들은 TritonGPU Dialect와 함께 공존하며, 그런 다음 해당 LLVM Dialect로 lowering된다. LLVM Dialect는 LLVM IR에 가장 가까운 layer의 설계로, LLVM Dialect에서 LLVM IR로의 변환은 매우 용이하다. 최종적으로 코드는 LLVM의 NVPTX backend로 연결되어, 후속에 GPU에서 동작 가능한 고성능 machine code가 생성된다.
 
-![이미지](images/img_04.png)
+![이미지](images/triton_mlir_0_compile/img_04.png)
 
 * * *
 
@@ -150,7 +150,7 @@ Triton의 소스 코드를 보면, Triton은 현재 NVIDIA GPU에서 비교적 �
 
 내 생각에는
 
-![이미지](images/img_05.png)
+![이미지](images/triton_mlir_0_compile/img_05.png)
 
 * * *
 

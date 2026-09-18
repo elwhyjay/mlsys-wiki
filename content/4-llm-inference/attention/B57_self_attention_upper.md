@@ -203,10 +203,10 @@ block_size  512 | time 241.190613 ms
 
 flash attention은 GPU 메모리 체계를 고려해 self-attention에 가한 매우 중요한 최적화입니다. 원리는 이전 글에서 자세히 다뤘으니 알고리즘만 첨부합니다.
 
-![FlashAttention vs PagedAttention](images/img_001.png)
+![FlashAttention vs PagedAttention](images/B57_ops7_self_attention_upper/img_001.png)
 *紫氣東來: FlashAttention → PagedAttention, Attention 추가 최적화 (1401 추천)*
 
-![flash attention 알고리즘](images/v2-8643433693129a3aa71e40817444e24b_1440w.jpg)
+![flash attention 알고리즘](images/B57_ops7_self_attention_upper/v2-8643433693129a3aa71e40817444e24b_1440w.jpg)
 
 핵심 파라미터 초기화:
 
@@ -269,9 +269,9 @@ __global__ void permute_kernel(float* q, float* k, float* v,
 
 flash attention 본체:
 
-![flash 흐름1](images/v2-fbc9fa38f8a6bf28f110e3e3f163d4f4_1440w.jpg)
+![flash 흐름1](images/B57_ops7_self_attention_upper/v2-fbc9fa38f8a6bf28f110e3e3f163d4f4_1440w.jpg)
 
-![flash 흐름2](images/v2-f5c316da574730621acfdb664c6f17cd_1440w.jpg)
+![flash 흐름2](images/B57_ops7_self_attention_upper/v2-f5c316da574730621acfdb664c6f17cd_1440w.jpg)
 
 ```cpp
 __global__ void attention_forward_kernel2(
@@ -518,7 +518,7 @@ block_size  512 | time 0.712848 ms
 
 여러 방법의 비교(A100-80G, y축은 지수 스케일):
 
-![V1~V5 비교](images/v2-a4570abe2dddeb81e163e99af82e190f_1440w.jpg)
+![V1~V5 비교](images/B57_ops7_self_attention_upper/v2-a4570abe2dddeb81e163e99af82e190f_1440w.jpg)
 
 코드: [attention_forward.cu](https://github.com/ifromeast/cuda_learning/blob/main/04_transformer/ops/attention_forward.cu).
 

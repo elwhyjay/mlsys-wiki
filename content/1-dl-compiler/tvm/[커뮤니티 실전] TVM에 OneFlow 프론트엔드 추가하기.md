@@ -8,13 +8,13 @@
 
 # 0x1. 효과
 
-![이미지](images/img_01.png)문서 미리보기
+![이미지](images/tvm_oneflow_frontend/img_01.png)문서 미리보기
 
 여기에는 전체 화면을 캡처하지 않았으니, 공식 사이트 https://tvm.apache.org/docs/how_to/compile_models/from_oneflow.html 에서 확인할 수 있다.
 
 Python API 미리보기:
 
-![이미지](images/img_02.png)Python API 미리보기
+![이미지](images/tvm_oneflow_frontend/img_02.png)Python API 미리보기
 
 현재 ResNet, MobileNet, ShuffleNet, GhostNet, YOLOv3, SRGAN, Vision Transformer 등 다양한 비전 모델을 성공적으로 지원하고 있으니, 많은 분들의 사용을 환영한다. 사용 방법은 https://tvm.apache.org/docs/how_to/compile_models/from_oneflow.html 를 참고하면 된다.
 
@@ -22,7 +22,7 @@ Python API 미리보기:
 
 아래 스크린샷은 이 작업의 PR 흐름을 보여준다. 4월에 기본 기능의 PR이 머지된 이후로는 기본적으로 Op 지원과 모델 지원, 그리고 BUG 수정이 주된 작업이었다.
 
-![이미지](images/img_03.png)PR 진행 과정
+![이미지](images/tvm_oneflow_frontend/img_03.png)PR 진행 과정
 
 PR 과정에서 열정적으로 도움을 주신 TVM 커뮤니티의 **「@masahi」** 께 깊이 감사드린다.
 

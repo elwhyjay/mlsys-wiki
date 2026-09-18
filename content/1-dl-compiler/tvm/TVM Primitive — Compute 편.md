@@ -20,15 +20,15 @@ vector_addition이 하려는 것은 사실 다음과 같습니다.
 
 이 식이 주어졌으니, 먼저 배열의 길이를 n으로 정한 다음, 두 배열 A와 B를 만들고, A와 B의 대응되는 위치의 element를 더해서 배열 C에 넣습니다. TVM에서는 이를 어떻게 구현하는지 살펴봅시다.
 
-![이미지](images/img_01.png)
+![이미지](images/tvm_primitive_compute/img_01.png)
 
 n은 정의된 배열의 길이를 나타내고, A, B는 각각 길이가 n인 배열을 만든 것입니다. 그런 다음 lambda 식을 통해 A와 B의 각 element 계산 결과를 C에 넣습니다. `te.compute`에 관해 말하자면 사실 이것이 바로 출력 결과입니다. 첫 번째 인자 `A.shape`는 출력 행렬의 shape를 나타내고, `lambda i:`는 `for i: 0->n-1`로 이해할 수 있습니다. 마지막에 `create_schedule`을 통해 C를 생성하는 과정을 구축합니다. 이 구축 과정이 사실 `te.compute`가 하는 일입니다. 마지막으로 `tvm.lower`를 통해 해당 schedule을 IR로 매핑합니다. `print` 함수를 사용해 살펴볼 수 있습니다.
 
-![이미지](images/img_02.png)
+![이미지](images/tvm_primitive_compute/img_02.png)
 
 평소에 작성하는 C 코드와 매우 비슷하지 않나요?
 
-![이미지](images/img_03.png)
+![이미지](images/tvm_primitive_compute/img_03.png)
 
 ## (2) GEMM
 
@@ -36,11 +36,11 @@ n은 정의된 배열의 길이를 나타내고, A, B는 각각 길이가 n인 �
 
 먼저 차원의 matrix A, 차원의 matrix B, 차원의 matrix C를 정의합니다. TVM에서의 구현을 살펴봅시다.
 
-![이미지](images/img_04.png)
+![이미지](images/tvm_primitive_compute/img_04.png)
 
 n, m, l은 각각 matrix의 dimension을 나타냅니다. A matrix와 B matrix가 먼저 matrix multiplication 연산을 수행하고, 그런 다음 C matrix와 더해서 최종 계산 결과를 얻습니다. 먼저 TVM이 생성한 schedule이 어떤 모습인지 살펴봅시다.
 
-![이미지](images/img_05.png)
+![이미지](images/tvm_primitive_compute/img_05.png)
 
 첫 번째 `te.compute`는 3중 for-loop를 만드는 것을 볼 수 있는데, 이것은 평소 두 matrix multiplication을 작성할 때 쓰는 방식입니다. 어렵지 않게 이해할 수 있는데, 여기서는 2차원 좌표 표현을 1차원 좌표 형식으로 풀어 놓은 것입니다 (A[i][j] -> A'[i * width + j]). 두 번째 `te.compute`가 생성하는 것은 matrix 안의 대응되는 위치의 element끼리의 덧셈입니다.
 
@@ -48,7 +48,7 @@ n, m, l은 각각 matrix의 dimension을 나타냅니다. A matrix와 B matrix�
 
 제가 처음 TVM을 배울 때 reduce에 대한 인식은 "약분"이라는 의미였는데, 그다지 정확하지는 않을 수도 있습니다. matrix multiplication 예시로 말하자면, 이고, 연산 후에는 등호 오른쪽의 식이 (i, j, k) 세 차원에서 (i, j) 두 차원으로만 변한 것을 볼 수 있습니다. 그렇다면 이렇게 하는 장점은 무엇일까요? 어떤 변수 묶음에 대해 동작하는 10중 for-loop 프로그램이 있는데, 최종적으로 6차원 vector만 얻고 싶다고 가정해 봅시다. 그러면 그 중 4중 for-loop는 reduce 될 수 있습니다. matrix multiplication에서는 아직 그 장점이 잘 보이지 않을 수 있지만, 매우 간단한 convolution을 작성해 보면 reduce가 가져다주는 이점을 볼 수 있습니다. 여기서는 디지털 영상 처리에서의 간단한 convolution을 예로 들겠습니다 (input feature map의 channel은 1, output feature map의 channel도 1). 알고리즘에 대한 설명은 다음과 같습니다. input은 어떤 convolution이고, kernel의 크기는 이며, output은 `te.compute`로 계산되어 얻어집니다.
 
-![이미지](images/img_06.png)
+![이미지](images/tvm_primitive_compute/img_06.png)
 
 위의 작성 방식에 대해 이야기해 봅시다. 이것은 매우 naive한 convolution 구현으로, padding 연산은 포함하지 않으며, kernel을 단일 채널 이미지 위에서 직접 들고 다니며 filtering을 수행합니다. 수학적 유도를 통해 단일 window에 대한 연산 결과를 얻을 수 있습니다.
 
@@ -62,19 +62,19 @@ n, m, l은 각각 matrix의 dimension을 나타냅니다. A matrix와 B matrix�
 
 다음 예시를 봅시다. 예를 들어 두 개의 배열 이 있고, , 가 있으며, A 배열은 같은 차원을 가지며 길이는 모두 n입니다. 그러면 C/C++로 구현한다면, 두 개의 for-loop를 작성해 각각 , 배열에 값을 할당하면 됩니다. 그렇다면 TVM의 DSL로는 어떻게 구현해야 할까요?
 
-![이미지](images/img_07.png)
+![이미지](images/tvm_primitive_compute/img_07.png)
 
 사실 매우 간단합니다. 생성된 schedule이 어떤 모습인지 봅시다.
 
-![이미지](images/img_08.png)
+![이미지](images/tvm_primitive_compute/img_08.png)
 
 B0, B1의 계산이 모두 두 개의 for-loop 안으로 통합되었으며, 따로 떨어져 연산되지 않았습니다. 물론 다음과 같이 작성하면
 
-![이미지](images/img_09.png)
+![이미지](images/tvm_primitive_compute/img_09.png)
 
 이에 대응해서 생성되는 schedule은 다음과 같이 됩니다.
 
-![이미지](images/img_10.png)
+![이미지](images/tvm_primitive_compute/img_10.png)
 
 이런 구현은 사실 효율적이지 않습니다. 왜냐하면 같은 차원의 for-loop라면 코드를 작성할 때 가능한 한 함께 묶어서 두기 때문입니다. 물론 이러한 최적화가 모든 상황에 적용되는지에 대해서는 분명 토론의 여지가 있습니다.
 
@@ -94,23 +94,23 @@ filter: [512, 256, 3, 3, 1, 1] (pad: 1, stride: 1)
 
 convolution의 첫 단계로 해야 할 일은 input feature map에 padding 연산을 수행하여, padding된 input feature map이 convolution을 거친 후의 output feature map의 크기가 input feature map의 크기와 같아지도록 하는 것입니다. 먼저 0으로 채우는 연산에 대해 이야기해 봅시다. 0으로 채우는 연산은 전통 디지털 영상 처리에서도 매우 많이 사용됩니다.
 
-![이미지](images/img_11.png)
+![이미지](images/tvm_primitive_compute/img_11.png)
 
 0으로 채우는 연산은, 사실 원래 input feature map의 위, 아래, 왼쪽, 오른쪽 네 변에 0을 한 줄씩 추가하는 것입니다 (pad=1). 그러면 원래 input feature map에서 Input[0][0]에 해당하던 element는 padding 후 InputPad[1][1]이 됩니다. 이렇게 하면 InputPad에서 어떤 element가 0이고 어떤 element가 1인지 알 수 있고, 이에 대응해 생성되는 schedule은 다음과 같습니다.
 
-![이미지](images/img_12.png)
+![이미지](images/tvm_primitive_compute/img_12.png)
 
 테두리 채우기를 마쳤다면, 다음은 conv2d 연산을 수행할 차례입니다. 우리의 data layout은 NCHW를 채택했으므로, TVM의 DSL로 구현하는 과정에서 lambda 식의 loop 순서는 batch -> in_channel -> height -> width가 되어야 합니다. 앞서 이야기한 1차원 convolution 예시를 결합해, Filter의 세 차원 (out_channel, kernel_size, kernel_size)에 대해서는 `te.reduce_axis` 연산을 사용합니다.
 
-![이미지](images/img_13.png)
+![이미지](images/tvm_primitive_compute/img_13.png)
 
 간단한 conv2d 알고리즘은 7중 for-loop로 표현할 수 있는데, 세 번의 reduce_axis 연산을 거치면 나머지 4중 for-loop가 만들어집니다. 위 그림의 알고리즘에서 B는 batch_size, K는 out_channel, C는 In_channel, Y는 Height, X는 Width를 나타내며, Fy와 Fx는 각각 kernel_size를 나타냅니다. TVM의 DSL로 기술한 convolution은 다음과 같습니다.
 
-![이미지](images/img_14.png)
+![이미지](images/tvm_primitive_compute/img_14.png)
 
 이에 대응되는 schedule은 다음과 같습니다.
 
-![이미지](images/img_15.png)
+![이미지](images/tvm_primitive_compute/img_15.png)
 
 ## (4) 정리
 

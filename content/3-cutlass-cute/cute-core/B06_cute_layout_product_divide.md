@@ -8,7 +8,7 @@
 
 CuTe가 Product·Divide를 도입한 목적은 무엇일까요? [Tiled Copy 글](../B03_cute_tiled_copy/README.md)에서 Thread와 Data의 매핑 관계를 구축해야 함을 언급했습니다. 4 thread block이 4×4 데이터 블록을 복사하는 예(그림 1):
 
-![Figure 1. tiled copy에서 thread와 data 매핑. 4 thread가 4x4 data 복사. 대용량 접근으로 1회 2 data, 행 방향 2회 반복](images/v2-793572c56162b01689b81f4cca9a3098_1440w.jpg)
+![Figure 1. tiled copy에서 thread와 data 매핑. 4 thread가 4x4 data 복사. 대용량 접근으로 1회 2 data, 행 방향 2회 반복](images/B06_cute_layout_product_divide/v2-793572c56162b01689b81f4cca9a3098_1440w.jpg)
 
 tiled copy CUDA 커널 작성은 본질적으로 **Thread Block이 한 번에 접근하는 데이터 범위를 확정**하고, 이를 **반복 확장**하여 데이터 블록 전체를 빠짐없이 덮는 것입니다.
 
@@ -38,21 +38,21 @@ $$\text{LayoutC} = \text{product}(\text{LayoutA}, \text{LayoutB})$$
 
 예: 각 **A-like Layout을 C의 한 열**로 순서대로 배열하면 **`logical_product`**. 그림으로:
 
-![Figure 1. logical_product. A 보완 → A-like layouts 추출 → B col-major 순서로 열 배열](images/v2-d4aa979fd26746f7c28782f56e6bdd12_1440w.jpg)
+![Figure 1. logical_product. A 보완 → A-like layouts 추출 → B col-major 순서로 열 배열](images/B06_cute_layout_product_divide/v2-d4aa979fd26746f7c28782f56e6bdd12_1440w.jpg)
 
 다른 Product 변형도 기본 의미는 동일하며, 최종 C 구성 시 shape·stride를 어떻게 뒤섞는지만 다릅니다. CUTLASS에서 자주 쓰이는 것들:
 
 - **`blocked_product`**: A 보완·A-like Layouts 추출 과정은 logical_product와 같음. 마지막 C 구성 시 A-like Layouts를 한 열로 세우지 않고 **"block"으로 뭉쳐 모음**. 직관적 "layout 반복" 이미지와 잘 맞아 CUTLASS에서 폭넓게 사용.
 
-![Figure 2. blocked_product. A 보완 → A-like layouts 추출 → B col-major 순서로 block 형태로 배열](images/v2-da7121b2baa99c6a4e21f9648fa677d7_1440w.jpg)
+![Figure 2. blocked_product. A 보완 → A-like layouts 추출 → B col-major 순서로 block 형태로 배열](images/B06_cute_layout_product_divide/v2-da7121b2baa99c6a4e21f9648fa677d7_1440w.jpg)
 
 - **`raked_product`**: blocked_product와 유사하지만, "block" 뭉칠 때 **B 형태에 가깝게 재배열**. "rake"(갈퀴)는 갈퀴 이빨 배치처럼 한 개씩 번갈아 놓인 느낌.
 
-![Figure 3. raked_product. A 보완 → A-like layouts 추출 → B col-major 순서로 block 형태로 배열 후 re-arrange로 raked 형태 형성](images/v2-5a11ff9f59a5248b308c9360ceb500ce_1440w.jpg)
+![Figure 3. raked_product. A 보완 → A-like layouts 추출 → B col-major 순서로 block 형태로 배열 후 re-arrange로 raked 형태 형성](images/B06_cute_layout_product_divide/v2-5a11ff9f59a5248b308c9360ceb500ce_1440w.jpg)
 
 "Raked"라는 명명은 실제로는 **병렬 계산 이론의 cyclic 분포**에서 유래했습니다. 각 프로세서의 작업 수를 균등하게 맞추는 데 자주 쓰입니다:
 
-![Figure 4. 병렬 계산 이론의 block 분포와 cyclic 분포](images/v2-4b99509d728e51756cc738fbc0bced37_1440w.jpg)
+![Figure 4. 병렬 계산 이론의 block 분포와 cyclic 분포](images/B06_cute_layout_product_divide/v2-4b99509d728e51756cc738fbc0bced37_1440w.jpg)
 
 Product는 **다차원 형태**도 지원:
 
@@ -133,7 +133,7 @@ $$\text{LayoutC} = \text{divide}(\text{LayoutA}, \text{LayoutB})$$
 
 **`logical_divide`** 과정 도식:
 
-![Figure 4. logical_divide. B col-major로 offset 얻음 → A에서 B-like layouts 찾음 → B-like layouts를 열로 배열](images/img_001.jpg)
+![Figure 4. logical_divide. B col-major로 offset 얻음 → A에서 B-like layouts 찾음 → B-like layouts를 열로 배열](images/B06_cute_layout_product_divide/img_001.jpg)
 
 **참고**: A에 divide를 가해 얻는 C는 **A와 size가 같고**, 매핑 관계만 바뀝니다. 초등 수학의 `A / B`와 다르게 직관적으로 와닿지 않을 수 있는데, 정수 나눗셈에서 **몫과 제수를 모두 보존**하는 것에 비유하면 됩니다. 예: `10 / 5 = (5, 2)`.
 
@@ -149,7 +149,7 @@ $$\text{LayoutC} = \text{divide}(\text{LayoutA}, (\text{LayoutB}_0, \text{Layout
 
 1차원에서 A의 shape가 바뀌면 B를 같게 유지해도 B의 offset으로 찾는 B-like Layouts가 따라 변합니다 — 바라지 않는 결과. `zipped_divide`로 동일 B가 서로 다른 shape의 A·A′에 작용하면 결과가 달라짐(그림 5):
 
-![Figure 5. 1D zipped_divide. 같은 layoutB가 다른 shape의 layoutA에 작용하면 선택 패턴이 변함](images/v2-10f03a0698da0708c57cee5e4ad5b34b_1440w.jpg)
+![Figure 5. 1D zipped_divide. 같은 layoutB가 다른 shape의 layoutA에 작용하면 선택 패턴이 변함](images/B06_cute_layout_product_divide/v2-10f03a0698da0708c57cee5e4ad5b34b_1440w.jpg)
 
 2차원으로 가면:
 
@@ -161,7 +161,7 @@ $$\text{TilerB} = (\text{LayoutB}_0, \text{LayoutB}_1)$$
 
 divide는 **A의 각 차원이 TilerB의 대응 LayoutB_i에 각각 divide**됩니다. TilerB 정의가 LayoutA의 shape에 영향받지 않으므로, **TilerB를 유지하고 shape가 다른 A·A′에 작용해도 선택 패턴이 일관됩니다**(그림 6):
 
-![Figure 6. 2D zipped_divide. 같은 layoutB가 다른 shape의 layoutA에 작용해도 패턴이 일관](images/v2-331923ea603956aa0a4919bae292c19d_1440w.jpg)
+![Figure 6. 2D zipped_divide. 같은 layoutB가 다른 shape의 layoutA에 작용해도 패턴이 일관](images/B06_cute_layout_product_divide/v2-331923ea603956aa0a4919bae292c19d_1440w.jpg)
 
 **사용 관례**: **divide는 다차원(특히 2D)이 주로, product는 1차원이 주로** 쓰입니다.
 
@@ -183,7 +183,7 @@ flat_divide    : (TileM, TileN, RestM, RestN, L, ...)
 
 그림 6의 TilerB의 `(LayoutB_0, LayoutB_1)`을 조밀 layout 두 개로 설정하면, **`zipped_divide` 후 layoutC의 각 열은 layoutA의 연속 소블록**, **각 행은 layoutA 블록 내 같은 위치 원소**가 됩니다(그림 7):
 
-![Figure 7. zipped_divide 사용 사례. 결과 layoutC의 행 방향 slice → A의 연속 소블록, 열 방향 slice → 블록 내 같은 위치 원소](images/v2-e00eb8e8e52d3056338cd99782a99ac1_1440w.jpg)
+![Figure 7. zipped_divide 사용 사례. 결과 layoutC의 행 방향 slice → A의 연속 소블록, 열 방향 slice → 블록 내 같은 위치 원소](images/B06_cute_layout_product_divide/v2-e00eb8e8e52d3056338cd99782a99ac1_1440w.jpg)
 
 CuTe를 써본 독자라면 친숙한 장면이 떠오를 것입니다 — **tiled copy의 `local_tile`과 `local_partition` 기능과 같은 것 아닌가?**
 

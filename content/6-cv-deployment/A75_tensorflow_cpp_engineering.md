@@ -4,7 +4,7 @@
 
 ### TensorFlow C++ 엔지니어링 지식점
 
-![TensorFlow C++](images/img_001.jpg)
+![TensorFlow C++](images/A75_tensorflow_cpp_engineering/img_001.jpg)
 
 최근 algorithm inference engineering, 즉 MNN/NCNN/TNN/ONNXRuntime/TF C++ 등을 정리하고 있다. 나중에 같은 문제를 만났을 때 빨리 찾기 위한 기록이다. 관련 C++ 추론 예제는 `Lite.AI.ToolKit`에 있다.
 

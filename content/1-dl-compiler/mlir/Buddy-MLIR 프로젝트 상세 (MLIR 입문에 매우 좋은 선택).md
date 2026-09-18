@@ -73,7 +73,7 @@ Buddy-MLIR 오픈소스 엔지니어링에는 현재 세 가지 Dialect가 있�
 
 IR 수준 예시는 상위(upstream) MLIR과 Buddy-MLIR에서 pass를 어떻게 사용하는지를 보여주며, 그중 일부 예시는 MLIR 통합 테스트에서 가져온 것입니다. 대부분의 경우 MLIR JIT 엔진인 mlir-cpu-runner를 직접 사용해 실행할 수 있습니다. lowering 파이프라인과 툴체인 설정은 makefile target에 지정되어 있습니다. 우리는 관심 있는 Dialect를 선택하여 해당 디렉터리로 이동해 실행할 target을 찾을 수 있습니다. Buddy-MLIR의 모든 예시는 `https://github.com/buddy-compiler/buddy-mlir/tree/main/examples` 이 디렉터리에 있습니다:
 
-![이미지](images/img_01.png)Buddy-MLIR 예시 분류
+![이미지](images/buddy_mlir_intro/img_01.png)Buddy-MLIR 예시 분류
 
 임의의 Dialect 예시의 MakeFile을 열어보면, 그 안에 주로 세 종류의 테스트가 있다는 것을 발견할 수 있습니다.
 
@@ -210,7 +210,7 @@ Coefficients broadcasting(CB) 알고리즘은 2D 컨볼루션의 효율적인 �
 
 그리고 CB 알고리즘의 과정은 아래 그림과 같습니다.
 
-![이미지](images/img_02.png)CB 알고리즘 흐름
+![이미지](images/buddy_mlir_intro/img_02.png)CB 알고리즘 흐름
 
 입력은 채널 수가 1인 이미지 또는 feature map이고, kernel의 채널 수도 1이라는 점에 주의하세요. 알고리즘의 실행 흐름은 대략 다음과 같습니다.
 
@@ -247,7 +247,7 @@ Buddy-MLIR은 또한 최적화를 보여주기 위한 에지 검출(edge detecti
     $ ./edge-detection ../../examples/ConvOpt/images/YuTu.png result.png  
     
 
-![이미지](images/img_03.png)원본 이미지![이미지](images/img_04.png)에지 검출 후의 이미지
+![이미지](images/buddy_mlir_intro/img_03.png)원본 이미지![이미지](images/buddy_mlir_intro/img_04.png)에지 검출 후의 이미지
 
 ### 3\. Digital Image Processing Examples
 
@@ -257,7 +257,7 @@ Buddy-MLIR은 DIP Dialect 관련 시연 예시도 제공하는데, 구체적으�
 
 위의 절에서는 주로 Buddy-MLIR에서 빌드한 애플리케이션을 어떻게 실행하는지 보여주었으며, 이번 절에서는 Buddy-MLIR의 구조에서 출발하여 이 엔지니어링을 이해하도록 안내하겠습니다. 엔지니어링의 전체 구조는 다음과 같이 요약할 수 있습니다.
 
-![이미지](images/img_05.png)Buddy-MLIR 엔지니어링 구조
+![이미지](images/buddy_mlir_intro/img_05.png)Buddy-MLIR 엔지니어링 구조
 
 우리는 주로 `include`와 `lib` 두 폴더에 시선을 둘 것이며, 그 외의 문서, 테스트 그리고 도구류의 소스 코드는 독자가 선택적으로 살펴볼 수 있습니다.
 
@@ -385,7 +385,7 @@ DIP Dialect는 디지털 이미지 처리에 대한 추상화입니다. 여기�
     def DIP_BoundaryOptionAttr : EnumAttr<DIP_Dialect, DIP_BoundaryOption, "boundary_option">;  
     
 
-![이미지](images/img_06.png)DIP Dialect의 Corr2DOp
+![이미지](images/buddy_mlir_intro/img_06.png)DIP Dialect의 Corr2DOp
 
 DIP Dialect는 유일한 operation인 DIP_Corr2DOp를 정의했는데, 이 Op는 2D 컨볼루션을 수행하기 전에 먼저 입력에 대해 Padding을 수행하여 컨볼루션 후 출력 feature map의 크기가 입력과 일치하도록 합니다. 여기에는 또한 많은 최적화 기법이 관련되어 있는데, 구체적으로는 https://github.com/buddy-compiler/buddy-mlir/blob/main/docs/dip-opt.md 이 문서와 https://github.com/buddy-compiler/buddy-mlir/blob/main/lib/Conversion/LowerDIP/LowerDIPPass.cpp 이 Pass 구현에 나타나 있습니다. 저는 이 알고리즘의 로직을 완전히 정리하지 못했으므로, 여기서는 이 부분을 설명하지 않겠습니다. 관심 있는 독자는 직접 연구해 보시기 바랍니다.
 

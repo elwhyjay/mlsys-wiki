@@ -2,7 +2,7 @@
 
 # CUTLASS 노트: 길잡이
 
-![](img/cutlass-notes-b32bee26/001.png)
+![](img/cute/cutlass-notes-b32bee26/001.png)
 
 이 CUTLASS 노트 시리즈는 가장 작은 Minimal GEMM에서 출발해 CuTe와 CUTLASS의 각종 컴포넌트, 그리고 Hopper, Blackwell 등 새로운 아키텍처의 특성을 차례로 확장해 나가며, 최종적으로 고성능 GEMM 융합 연산자를 구현한다.
 
@@ -14,7 +14,7 @@
 
 한마디로 소개하자면, **CUTLASS는 템플릿 라이브러리와 다수의 재사용 가능한 컴포넌트의 형태로 GEMM을 둘러싼 알고리즘 개발과 최적화의 해법을 제공한다.**
 
-![그림1: CUTLASS GEMM Hierarchy](img/cutlass-notes-b32bee26/002.png)
+![그림1: CUTLASS GEMM Hierarchy](img/cute/cutlass-notes-b32bee26/002.png)
 
 
 NV 하드웨어의 Tensor Core는 성능이 강력하고, 현재 주류 계산 작업은 모두 기본적인 GEMM 연산자를 벗어날 수 없다. 개발자가 어떻게 하면 효율적인 GEMM 연산을 편리하게 구현할 수 있는지, 그리고 GEMM과 다른 계산의 overlap 및 융합을 통해 하드웨어의 연산 성능 상한을 끌어내고, 나아가 각종 상위 작업에서 품질과 효율을 높일 수 있는지가 바로 CUTLASS가 해결하려는 문제다.
@@ -90,7 +90,7 @@ CUTLASS 노트 (14): Warp Specialization
 
 NV GPU의 SM 아키텍처는 여러 세대의 진화를 거쳤다. 아래 그림은 Pascal 아키텍처부터 최신 Blackwell 아키텍처까지의 SM 구조를 보여 준다.
 
-![그림2: Volta 부터 Blackwell 까지의 SM 아키텍처 진화](img/cutlass-notes-b32bee26/003.jpg)
+![그림2: Volta 부터 Blackwell 까지의 SM 아키텍처 진화](img/cute/cutlass-notes-b32bee26/003.jpg)
 
 우리는 그중 계산 유닛에 주목한다.
 - Pascal 아키텍처의 계산 유닛은 Unified Int32 & FP32 Core이며, 단일 Core가 정수 계산과 부동소수점 계산을 모두 실행할 수 있다.
@@ -127,7 +127,7 @@ CUDA Core는 비교적 범용적인 계산 유닛이라 각종 계산 작업을 
 
 1세대 Tensor Core(Volta)는 한 클록 사이클 안에 4*4 규모의 FP16 MMA 연산을 계산할 수 있었고, 연산 성능은 2*4*4*4 = 128 FLOPs/cycle이었다. 이후 각 세대의 Tensor Core는 이전 세대 대비 연산 성능이 매번 두 배가 되었다. 최신 Blackwell 아키텍처의 Tensor Core는 이미 5세대까지 발전했으며, 단일 TC의 연산 성능은 2048 FLOPs/cycle이다.
 
-![그림2: Volta 아키텍처에서의 단일 명령어 Tensor Core 계산](img/cutlass-notes-b32bee26/004.png)
+![그림2: Volta 아키텍처에서의 단일 명령어 Tensor Core 계산](img/cute/cutlass-notes-b32bee26/004.png)
 
 실제로 우리는 공개된 데이터를 근거로 현재 NVIDIA 하드웨어의 이론 연산 성능, 즉 모든 Tensor Core 최대 연산 성능의 합을 손으로 계산해 낼 수 있다. 계산 공식은 다음과 같다.
 
@@ -135,7 +135,7 @@ CUDA Core는 비교적 범용적인 계산 유닛이라 각종 계산 작업을 
 
 다음은 자주 쓰이는 몇 가지 하드웨어의 성능 지표다(그중 B200 하드웨어의 구체적 spec은 공개되지 않았으므로 데이터는 참고용일 뿐이다).
 
-![](img/cutlass-notes-b32bee26/005.png)
+![](img/cute/cutlass-notes-b32bee26/005.png)
 
 또한 CUTLASS를 사용하는 과정에서 우리는 PTX 관련 명령어를 자주 마주치게 된다. 일반적으로 CUDA Core가 관여하는 계산은 add, sub, sin, cos, ex2 같은 범용 계산 명령어 집합을 사용하고, Tensor Core가 관여하는 텐서 계산은 mma, wgmma, tcgen05 처럼 SM 아키텍처와 강하게 결부된 특수 명령어 집합을 사용한다. 뒤이은 노트들에서 코드가 어떤 특수 PTX 명령어를 사용했는지, 그리고 그 구체적인 기능이 무엇인지 분석할 것이다.
 
@@ -155,17 +155,17 @@ CuTe의 Tensor는 Pytorch의 Tensor와 매우 유사하다. 둘 다 텐서의 �
 
 일반적으로 CuTe의 Layout은 일종의 **매핑 관계**이며, 문맥에 따라 서로 다른 의미를 가진다. **Tensor Layout은 우리가 접하는 첫 번째 종류의 Layout으로, tensor 좌표와 메모리 주소 offset 사이의 매핑 관계를 표현한다.**
 
-![그림1: CuTe 의 첫 번째 Layout —— Tensor Layout](img/cutlass-notes-b32bee26/006.png)
+![그림1: CuTe 의 첫 번째 Layout —— Tensor Layout](img/cute/cutlass-notes-b32bee26/006.png)
 
 
 CuTe에서 우리는 Layout을 **shape : stride** 형식으로 표기한다. 여기서 shape와 stride는 하나의 tuple일 수도 있고, tuple이 중첩된 tuple일 수도 있다. **Layout의 중첩 가능성은 Pytorch Tensor와 다른 중요한 특징이다**. 중첩 표기가 있으면 훨씬 복잡한 Tensor pattern을 여럿 만들어 낼 수 있다.
 
-![그림2: CuTe 의 중첩 Layout](img/cutlass-notes-b32bee26/007.png)
+![그림2: CuTe 의 중첩 Layout](img/cute/cutlass-notes-b32bee26/007.png)
 
 
 우리가 마주치는 첫 번째 CuTe API는 Tensor를 만드는 방법인 `make_tensor`다. 넘기는 세 개의 인자는 각각 data_ptr, shape, stride이다(shape와 stride를 제공하지 않고 layout을 바로 넘길 수도 있다). **stride를 제공하지 않으면 CuTe는 기본적으로 left-major의 stride를 만드는 반면 Pytorch는 기본이 right-major다. 이것이 CuTe Tensor와 Pytorch Tensor의 두 번째 차이점이다.**
 
-![그림3: CuTe API —— make_tensor](img/cutlass-notes-b32bee26/008.png)
+![그림3: CuTe API —— make_tensor](img/cute/cutlass-notes-b32bee26/008.png)
 
 
 CuTe Tensor의 차원은 관례적으로 mode라고 부른다. 예를 들어 가장 왼쪽의 차원이 first mode / 0th mode이고, 중첩 Layout의 각 차원은 sub mode라고 부른다. size<mode>(tensor) 방식으로 tensor의 각 차원 크기를 얻을 수 있다.
@@ -174,7 +174,7 @@ CuTe Tensor의 차원은 관례적으로 mode라고 부른다. 예를 들어 가
 
 비교적 큰 규모의 GEMM 계산에서는 이를 블록으로 나누어 처리하여, 각 계층의 저장 크기 제약 아래에서 병렬 계산을 효율적으로 구현해야 한다. 일반적으로 이런 블록 분할 처리를 tiling이라고 부른다. CuTe에도 Tensor를 블록으로 나누는 API인 `local_tile`이 있다.
 
-![그림4: CuTe API —— local_tile](img/cutlass-notes-b32bee26/009.png)
+![그림4: CuTe API —— local_tile](img/cute/cutlass-notes-b32bee26/009.png)
 
 각 tile의 shape 크기를 주면 하나의 Tensor를 여러 개의 작은 Tensor(tile)로 잘라 낼 수 있고, 좌표 coord로 그중 하나의 tile을 얻을 수 있다.
 
@@ -224,7 +224,7 @@ PTX 문서에는 각 mma 명령어에 대응하는 행렬 원소와 각 스레�
 
 CuTe로 이 16x8x8 mma 명령어의 매핑 관계를 출력해 보면 다음과 같다.
 
-![그림5: Minimal GEMM kernel 의 Tiled MMA](img/cutlass-notes-b32bee26/010.png)
+![그림5: Minimal GEMM kernel 의 Tiled MMA](img/cute/cutlass-notes-b32bee26/010.png)
 
 여기서 왼쪽 아래 행렬이 A, 오른쪽 위 행렬이 B, 오른쪽 아래 행렬이 C/D이다. 각 행렬 원소 안의 TxVy는 그 원소가 스레드 x의 y번째 데이터임을 나타낸다. 위 그림에서 행렬 A의 shape는 MxK, 행렬 B의 shape는 KxN이며, 모든 행렬이 K-major임에 유의하라.
 
@@ -259,7 +259,7 @@ auto copy_atom = AutoVectorizingCopy{};
 copy(copy_atom, tCgA, tCrA);
 ```
 
-![그림6: GMEM 에서 Register 로의 복사](img/cutlass-notes-b32bee26/011.png)
+![그림6: GMEM 에서 Register 로의 복사](img/cute/cutlass-notes-b32bee26/011.png)
 
 여기서 copy_atom은 데이터 복사에 사용되는 명령어에 대응한다. 메모리 접근 효율을 최대화하기 위해 우리는 하나의 복사 명령어가 가능한 한 많은 연속 메모리를 복사하기를 원한다(즉 **vectorized 메모리 접근**). 통상적인 단일 복사 명령어는 최대 128 bits의 데이터를 복사할 수 있지만, 많은 경우 복사해야 할 데이터가 연속적이지 않다. 따라서 AutoVectorizingCopy는 CuTe가 MMA에 근거해 가장 큰 연속 데이터 길이를 자동으로 고르게 하고, 이를 통해 구체적인 복사 명령어를 결정하게 한다.
 
@@ -275,7 +275,7 @@ gemm(tiled_mma, tCrD, tCrA, tCrB, tCrC);
 copy(copy_atom, tCrD, tCgD);
 ```
 
-![그림7: Register 에서 GMEM 으로의 복사](img/cutlass-notes-b32bee26/012.png)
+![그림7: Register 에서 GMEM 으로의 복사](img/cute/cutlass-notes-b32bee26/012.png)
 
 이어서 위의 기초 API를 사용해 단일 명령어 16x8x8 규모의 MMA 계산을 구현해 보겠다.
 
@@ -286,7 +286,7 @@ Minimal kernel을 작성하기 전에 우리는 먼저 연산자의 각종 세�
 
 이번 시나리오의 연산자 상세 내용은 아래 표와 같다.
 
-![](img/cutlass-notes-b32bee26/013.png)
+![](img/cute/cutlass-notes-b32bee26/013.png)
 
 우리는 단 하나의 명령어로 MMA를 계산하므로 하나의 block에 32개 스레드만 띄우면 된다. 이번 시나리오에서는 계층적 tiling을 할 필요가 없으므로 모든 tile shape는 단일 명령어 MMA atom shape와 같다.
 
@@ -579,25 +579,25 @@ ncu -o ncu_prof_1 --import-source 1 --set full --kernel-name "minimal_gemm" -f p
 
 소프트웨어를 열면 모든 연산자를 profile 한 뒤의 개요 화면을 볼 수 있다. 중요한 관측 지표로는 실행 시간(Duration), 계산 및 메모리 접근 이용률(Compute/Memory Throughput), 사용한 레지스터 수(#Registers), 그리고 Grid/Block size가 있다.
 
-![그림8: Nsight Compute 개요 화면](img/cutlass-notes-b32bee26/014.png)
+![그림8: Nsight Compute 개요 화면](img/cute/cutlass-notes-b32bee26/014.png)
 
 실행 시간에 관해서는, ncu profile의 시간(~3us)이 CUDA Event로 계산한 시간(~8us)보다 작다는 것을 알 수 있다. nsys profile로 한 번 더 확인해 보면 ncu가 계산한 kernel 실행 시간이 더 정확하다는 것을 알 수 있다. 개인적으로 생각하는 이유는 이렇다. CUDA Event가 기록하는 것은 현재 Event를 stream 큐에 삽입한 뒤 Event가 실행되기 시작한 시각이다. 이는 kernel launch부터 Event launch까지의 CPU 시간이 kernel의 실제 실행 시간보다 클 때 Event의 시간 측정이 정확하지 않다는 뜻이다.
 
-![그림9-1: Event 의 시간 측정 원리](img/cutlass-notes-b32bee26/015.png)
+![그림9-1: Event 의 시간 측정 원리](img/cute/cutlass-notes-b32bee26/015.png)
 
-![그림9-2: nsys 안의 CUDA Event](img/cutlass-notes-b32bee26/016.png)
+![그림9-2: nsys 안의 CUDA Event](img/cute/cutlass-notes-b32bee26/016.png)
 
 상세한 이용률 지표는 Details 탭의 첫 번째 목록 아래에서 찾을 수 있으며, 이는 거시적 차원에서 kernel 성능을 관측하고 비교하는 데 도움이 된다. 계산 이용률이 높고 메모리 접근 이용률이 낮다면 보통 연산자의 계산이 병목이라는(Compute bound) 뜻이고, 반대라면 연산자의 메모리 접근이 병목이라는 뜻이므로 메모리 접근이 제한되는 원인을 더 분석해야 한다.
 
-![그림10: 계산과 메모리 접근의 이용률](img/cutlass-notes-b32bee26/017.png)
+![그림10: 계산과 메모리 접근의 이용률](img/cute/cutlass-notes-b32bee26/017.png)
 
 실제 응용에서 많은 연산자는 메모리 접근이 병목이다. 메모리 접근 효율을 최적화하고 싶다면, Nsight Compute의 Memory Chart에서 메모리 접근 경로의 어디가 병목인지, 어느 곳의 메모리 접근 효율이 기대에 못 미치는지 등을 직관적으로 분석할 수 있다.
 
-![그림11: Kernel Memory Chart](img/cutlass-notes-b32bee26/018.png)
+![그림11: Kernel Memory Chart](img/cute/cutlass-notes-b32bee26/018.png)
 
 단일 kernel이 메모리 접근 명령어를 몇 개나 사용했는지, 전송한 데이터량은 얼마인지, 그리고 하드웨어가 memory transaction을 몇 번 실행했는지도 표 형태로 관찰할 수 있다. 독자는 여기 있는 데이터가 어떻게 계산되어 나온 것인지 분석해 보기 바란다.
 
-![그림12: Kernel Memory Table](img/cutlass-notes-b32bee26/019.png)
+![그림12: Kernel Memory Table](img/cute/cutlass-notes-b32bee26/019.png)
 
 Nsight Compute에는 자주 쓰이는 컴포넌트가 이 밖에도 많다. 뒤이은 노트들에서 더 소개하고, profile 데이터와 결합해 연산자를 분석하겠다.
 
@@ -613,7 +613,7 @@ Minimal GEMM kernel에서는 CuTe API를 사용해 데이터 복사와 MMA의 �
 
 Source 탭에서 View PTX and SASS를 고르면 왼쪽의 PTX code와 오른쪽의 SASS code를 볼 수 있다.
 
-![그림13: Nsight Compute 의 Source 화면](img/cutlass-notes-b32bee26/020.png)
+![그림13: Nsight Compute 의 Source 화면](img/cute/cutlass-notes-b32bee26/020.png)
 
 되짚어 보면 Minimal GEMM kernel이 주로 완료한 일은 네 가지다.
 
@@ -637,7 +637,7 @@ st.global.u32 	[%rd15], %r2;
 
 Minimal GEMM kernel의 SASS code는 더욱 간결해서, 마지막의 BRA 명령어를 빼면 프로그램 전체가 34개 명령어뿐이다.
 
-![그림14: Minimal GEMM 의 SASS 코드(SM90 아키텍처)](img/cutlass-notes-b32bee26/021.png)
+![그림14: Minimal GEMM 의 SASS 코드(SM90 아키텍처)](img/cute/cutlass-notes-b32bee26/021.png)
 
 인자 읽기, 상수 읽기, 주소 계산을 제외하면 핵심 명령어도 6개뿐이다.
 
@@ -647,13 +647,13 @@ Minimal GEMM kernel의 SASS code는 더욱 간결해서, 마지막의 BRA 명령
 
 이 명령어들과 PTX는 대응 관계를 이룰 수 있다(실제 PTX와 SASS 명령어는 일대일로 대응하지 않으며, 표는 참고용일 뿐이다).
 
-![](img/cutlass-notes-b32bee26/022.png)
+![](img/cute/cutlass-notes-b32bee26/022.png)
 
 SASS 명령어 관련 자료는 비교적 적지만, PTX 명령어의 동작은 NV 문서에 상세히 기록되어 있다. 따라서 뒤이은 노트들에서는 PTX 수준의 프로그래밍에 더 주목한다. 게다가 CUTLASS도 PTX 인라인을 대량으로 사용한다. 관심 있는 독자는 Minimal GEMM kernel의 CuTe API에서 출발해 가장 안쪽의 메모리 접근과 계산의 PTX 명령을 찾아, 우리가 보여 준 결과와 일치하는지 확인해 보기 바란다.
 
 또한 Nsight Compute는 관련 명령어의 주소 연산과 레지스터 데이터의 생명 주기도 보여 줄 수 있다.
 
-![그림15: SASS 명령어의 메모리 접근 정보와 레지스터 생명 주기](img/cutlass-notes-b32bee26/023.png)
+![그림15: SASS 명령어의 메모리 접근 정보와 레지스터 생명 주기](img/cute/cutlass-notes-b32bee26/023.png)
 
 ## 4. 정리
 
@@ -673,7 +673,7 @@ SASS 명령어 관련 자료는 비교적 적지만, PTX 명령어의 동작은 
 
 MMA 시나리오에서의 `D = A * B + C` 계산을 생각해 보자. 입력 데이터 정밀도에는 A, B, C 세 가지가 있으며 이를 각각 **ComputeTypeA**, **ComputeTypeB**, **ComputeTypeC**로 표기한다. accumulator 정밀도는 A*B의 결과와 C를 더한 뒤 산출되는 데이터의 정밀도이며(이것이 Tensor Core의 실제 누산 정밀도는 아니라는 점에 유의하라), 이를 **AccType**으로 표기한다. 이것이 곧 A*B+C의 계산 결과이기도 하다. 우리가 필요로 하는 D의 정밀도가 바로 AccType이라면 연산자는 A*B+C의 결과를 그대로 반환하면 되고, 그렇지 않다면 정밀도 변환 작업을 한 단계 더 수행하여 AccType을 우리가 원하는 출력 정밀도로 변환해야 한다. 이 출력 정밀도를 **OutType**으로 표기한다.
 
-![그림1: MMA 시나리오에서의 수치 정밀도](img/cutlass-notes-b32bee26/024.png)
+![그림1: MMA 시나리오에서의 수치 정밀도](img/cute/cutlass-notes-b32bee26/024.png)
 
 PTX의 MMA 명령어는 일반적으로 그 명령어에 대응하는 수치 정밀도를 표기한다. 예를 들면 다음과 같다.
 
@@ -699,7 +699,7 @@ mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32
 
 DeepSeek V3 논문에 나오는 FP8 Linear 계산을 예로 들어 보자.
 
-![그림2: DeepSeek V3 의 FP8 정밀도 계산](img/cutlass-notes-b32bee26/025.png)
+![그림2: DeepSeek V3 의 FP8 정밀도 계산](img/cute/cutlass-notes-b32bee26/025.png)
 
 
 순전파 Linear 계산을 예로 들면, 모델 가중치의 정밀도는 FP8(양자화 파라미터를 동반)이고 입력 데이터의 정밀도는 BF16이다. 연산자를 실행하기 전에 먼저 연산자 밖에서 BF16 입력을 FP8로 양자화해야 하고, 그다음 FP8 입력과 FP8 모델 가중치를 연산자에 넘겨 GEMM을 계산하며 누산 정밀도는 FP32이다. 마지막으로 연산자 안에서 계산 결과를 BF16으로 변환해 출력한다. 따라서 여기서는 BF16 = FP8 * FP8 + FP32 의 GEMM을 완료해야 한다. Pytorch만으로는 이런 계산을 간편하게 완료할 방법이 없음이 분명하다.
@@ -710,7 +710,7 @@ DeepSeek V3 논문에 나오는 FP8 Linear 계산을 예로 들어 보자.
 
 먼저 이번 편에서 구현할 2개 연산자의 상세 내용을 정리한다.
 
-![](img/cutlass-notes-b32bee26/026.png)
+![](img/cute/cutlass-notes-b32bee26/026.png)
 
 Kernel 1은 입력 A, B 행렬의 정밀도가 BF16이고 C 행렬 정밀도, 누산 정밀도, D 행렬 정밀도가 FP32일 것을 요구한다. 반면 Kernel 2는 D 행렬의 정밀도가 BF16일 것을 요구한다. 그렇다면 이 두 가지 정밀도의 계산을 어떻게 구현해야 할까?
 
@@ -805,7 +805,7 @@ cvt.rn.bf16.f32 %rs3, %f3;
 
 여기서 `.rn`은 rounds to nearest even을 뜻한다. 다른 반올림 방식을 쓰고 싶다면 다른 명령어로 바꾸면 된다. 구체적인 내용은 PTX 문서를 참고하라.
 
-![그림3: PTX 부동소수점 rounding 방식](img/cutlass-notes-b32bee26/027.png)
+![그림3: PTX 부동소수점 rounding 방식](img/cute/cutlass-notes-b32bee26/027.png)
 
 PTX와 달리 SASS 쪽에서는 명령어가 2개만 늘어난다. 그 의미는 레지스터 4개에 담긴 FP32 데이터 4개의 정밀도를 변환하고, 이를 묶어 레지스터 2개에 저장하되 각 레지스터에 BF16 데이터를 2개씩 담는다는 것이다.
 
@@ -827,7 +827,7 @@ STG.E desc[UR4][R14.64], R7
 
 Ada 아키텍처부터 NV는 FP8 정밀도의 MMA 명령어를 제공한다. 우리는 가장 작은 FP8 GEMM kernel을 작성해 볼 수 있는데, PTX 문서를 참고하면 그 최소 shape는 (16, 8, 32)이다. 여기서는 FP8의 두 가지 format 정밀도(E4M3, E5M2)를 섞어 GEMM을 하는 다소 화려한 시나리오를 가정한다. 실제로 PTX 명령어는 이런 정밀도를 지원하지만 CUTLASS에는 대응하는 MMA op가 없다. 그러니 직접 작성해 보자!
 
-![](img/cutlass-notes-b32bee26/028.png)
+![](img/cute/cutlass-notes-b32bee26/028.png)
 
 ### 4.1 MMA Atom 의 베일 벗기기
 
@@ -929,13 +929,13 @@ struct MMA_Traits<SM80_16x8x8_F16F16F16F16_TN>
 
 일반적으로 TV Layout은 전단사이다. 즉 (T, V)와 (M, N)이 일대일 대응 관계를 가지므로 그에 대응하는 역매핑도 존재한다. 이것이 우리가 접하는 세 번째 종류의 Layout인 **MN Layout**이며, (M, N) -> (T, V)의 매핑 관계를 나타낸다. 앞 편 노트에서 보여 준 MMA 매핑 관계(아래 그림 참고)가 사실은 그 MMA 명령어에 대응하는 MN Layout이다.
 
-![그림4: MMA 명령어의 MN Layout 개념도](img/cutlass-notes-b32bee26/029.png)
+![그림4: MMA 명령어의 MN Layout 개념도](img/cute/cutlass-notes-b32bee26/029.png)
 
 ALayout = ((4, 8), (2, 2)) : ((32, 1), (16, 8)) 을 예로 들어 스레드가 필요한 행렬 원소를 어떻게 찾는지 설명한다.
 
 **TV Layout의 두 mode는 각각 스레드 idx와 행렬 원소 idx이다**. MN Layout 개념도를 참고하면, A 행렬에는 모두 16 x 8 = 128 개의 원소가 있고 MMA에는 총 32개 스레드가 참여하므로 각 스레드는 A 행렬 원소를 4개씩 받아야 한다. 따라서 스레드 idx의 값 범위는 0-31이고 행렬 원소 idx의 값 범위는 0-3이며, A 행렬에 대응하는 TV Layout의 shape는 (32, 4)로 ALayout의 shape와 같다.
 
-![그림5: TV Layout 매핑 관계의 의미](img/cutlass-notes-b32bee26/030.png)
+![그림5: TV Layout 매핑 관계의 의미](img/cute/cutlass-notes-b32bee26/030.png)
 
 ALayout = ((4, 8), (2, 2)) : ((32, 1), (16, 8)) 을 이미 알고 있다고 가정하면, 스레드 11의 2번째 원소는 행렬의 어느 좌표에서 데이터를 가져와야 할까?
 
@@ -997,7 +997,7 @@ struct SM90_16x8x32_F32E4M3E5M2F32_TN
 MMA Traits를 작성하는 일은 조금 더 번거롭다. 먼저 PTX 문서에서 그 명령어에 대응하는 모든 행렬의 MN Layout을 찾아야 한다. 여기서는 A 행렬을 예로 들며, 그 MN Layout은 다음과 같다.
 
 
-![그림6: FP8 A 행렬 MN Layout 개념도](img/cutlass-notes-b32bee26/031.png)
+![그림6: FP8 A 행렬 MN Layout 개념도](img/cute/cutlass-notes-b32bee26/031.png)
 
 그다음 이 MN Layout으로부터 TV Layout을 거꾸로 유도해야 한다. 위 그림에서 A 행렬의 TV Layout이 ((4, 8), (4, 2, 2)) : ((64, 1), (16, 8, 256)) 임을 어렵지 않게 유도할 수 있다.
 
@@ -1110,7 +1110,7 @@ HMMA.16816.F32 R4, R8, R20, R4
 
 따라서 행렬 연산을 처리하는 단일 MMA 명령어만 있으면 SM 사이에서 행렬 분할을 병렬로 계산하고 **SM 안에서 여러 개의 MMA 명령어를 루프로 실행**하여 임의 규모의 행렬 연산을 구현할 수 있다.
 
-![그림1: 단일 명령어를 임의 규모의 행렬 연산으로 확장하기](img/cutlass-notes-b32bee26/032.png)
+![그림1: 단일 명령어를 임의 규모의 행렬 연산으로 확장하기](img/cute/cutlass-notes-b32bee26/032.png)
 
 현실적인 차원에서 우리는 연산의 실현 가능성뿐 아니라 어떻게 효율적으로 연산을 완료할지도 고려해야 한다. 올바른 GEMM 연산자를 작성하는 것은 어렵지 않다. 어려운 것은 하드웨어와 명령어 집합의 특성을 활용해 성능이 최적인 GEMM 연산자를 작성하는 일이다.
 
@@ -1152,14 +1152,14 @@ Flash Attention 같은 알고리즘은 GMEM과 SMEM의 메모리 접근 효율 �
 
 임의 규모의 GEMM 작업 D = AB 에 대해, 물론 1단계 Tiling만 해서 하나의 block 안에서 16x8x8의 MMA 명령어를 루프로 실행하여 임의 규모의 GEMM 연산을 완료할 수도 있다.
 
-![그림2: 단일 Block 으로 GEMM 하나를 완료하기](img/cutlass-notes-b32bee26/033.png)
+![그림2: 단일 Block 으로 GEMM 하나를 완료하기](img/cute/cutlass-notes-b32bee26/033.png)
 
 
 이런 구현에는 문제가 적지 않은데, 그중 가장 명백한 문제는 GPU의 다중 SM 병렬 능력을 활용하지 못한다는 점이다.
 
 계산 작업을 병렬화하기 위해 D 행렬을 16x8 크기로 여러 개의 tile로 잘라 낼 수 있다. tile 사이는 병렬 계산이 가능하므로 하나의 tile 계산 작업을 하나의 block에 맡길 수 있다. block 내부에서는 k 차원을 따라 루프를 돌면서 GMEM에서 16x8 크기의 A 행렬 조각과 8x8 크기의 B 행렬 조각을 복사해 레지스터에 저장하고, 이어서 MMA 명령어를 실행해 tile의 계산을 완료하고, 결과를 GMEM에 다시 써 넣으면 된다.
 
-![그림3: SM 간 병렬의 구현](img/cutlass-notes-b32bee26/034.png)
+![그림3: SM 간 병렬의 구현](img/cute/cutlass-notes-b32bee26/034.png)
 
 ### 2.1 Tile 의 규모 확장하기
 
@@ -1174,7 +1174,7 @@ SM은 병렬로 돌아가게 되었지만 각 SM의 연산 성능은 충분히 �
 
 그리하여 단일 mma 명령어를 더 큰 tile로 확장할 수 있다. 예를 들어 스레드를 8배(M 차원 2배, N 차원 4배)로 확장하고 각 warp의 mma 명령어를 K 차원으로 2배 확장하면, 하나의 tile 크기가 32x32x16이 되고 총 256개 스레드가 하나의 tile 계산을 실행한다.
 
-![그림4: Tile Tiling](img/cutlass-notes-b32bee26/035.png)
+![그림4: Tile Tiling](img/cute/cutlass-notes-b32bee26/035.png)
 
 하나의 tile 크기를 무한히 확장할 수 있을까? 이론상으로는 가능하지만 효율을 고려하면 불가능하다. 먼저 단일 block의 스레드 수는 2048개를 넘을 수 없다. 다음으로 스레드 수를 확장하든 mma 명령어를 확장하든 더 많은 레지스터가 필요하므로 RMEM의 저장 한계에 부딪히게 된다. 물론 레지스터 공간을 충분히 활용하고 싶지만, 확장 규모가 지나치게 커지면 register spilling이 발생해 성능 손실과 대량의 GMEM 디바이스 메모리 사용(그리고 매우 긴 컴파일 시간)을 초래한다. 따라서 스레드 수와 tile 규모를 합리적으로 고르는 일은 대단히 중요하다.
 
@@ -1186,7 +1186,7 @@ GEMM 작업에서 같은 행의 tile들은 같은 행의 A 행렬 조각을 공�
 
 따라서 단일 tile을 (M, N, K) 세 차원으로 각각 (4, 4, 2)배 확장해 하나의 block의 계산 규모를 128x128x32로 확장할 수 있다.
 
-![그림5: Block Tiling](img/cutlass-notes-b32bee26/036.jpg)
+![그림5: Block Tiling](img/cute/cutlass-notes-b32bee26/036.jpg)
 
 하나의 block 크기를 무한히 확장할 수 있을까? 이론상으로는 가능하지만 **효율을 고려하면 불가능하다**. 단일 block의 SMEM 저장 크기가 제한적이기 때문에, block이 큰 경우 A/B 행렬의 조각을 한 번에 SMEM에 전부 넣을 수 없다. 설령 데이터를 나눠서 복사할 수 있다 해도, 지나치게 큰 block은 전체 block 수를 줄여 SM 차원의 병렬 계산 효율에 영향을 준다. 따라서 block size를 합리적으로 조정하는 것도 연산자 최적화의 중요한 고비다.
 
@@ -1196,7 +1196,7 @@ GEMM 작업에서 같은 행의 tile들은 같은 행의 A 행렬 조각을 공�
 
 block의 SMEM 제약을 고려하면 보통 계산에 참여하는 A/B 행렬 조각을 한 번 더 블록으로 나누어, 매 라운드마다 A/B 분할 한 쌍만 복사하고 계산 결과를 이전 라운드 결과 위에 누산함으로써, K 차원의 루프를 통해 하나의 block의 완전한 계산을 완료한다.
 
-![그림6: GEMM 3단계 Tiling](img/cutlass-notes-b32bee26/037.png)
+![그림6: GEMM 3단계 Tiling](img/cute/cutlass-notes-b32bee26/037.png)
 
 여기까지 해서 GEMM 연산은 Global에서 Block으로, Block에서 Tile로, Tile에서 MMA Atom으로 가는 3단계 Tiling으로 세분되었다. 주목할 만한 점은 **각 단계의 Tiling이 모두 GPU 하드웨어 특성과 긴밀하게 연관되어 있다**는 것이다.
 
@@ -1208,13 +1208,13 @@ block의 SMEM 제약을 고려하면 보통 계산에 참여하는 A/B 행렬 �
 
 이 CUTLASS 노트 시리즈의 취지는 "바닥에서 위로"다. 이번 편에서는 CUTLASS에서 MMA Atom을 어떻게 확장하여 단일 명령어 계산을 하나의 Tile 계산으로 확장하는지에 초점을 맞춰 분석한다.
 
-![그림7: 먼저 Tile 수준의 계산에 주목해 보자](img/cutlass-notes-b32bee26/038.png)
+![그림7: 먼저 Tile 수준의 계산에 주목해 보자](img/cute/cutlass-notes-b32bee26/038.png)
 
 ## 3. Tiled MMA 구현
 
 먼저 이번 편에서 구현할 연산자의 상세 내용을 적어 둔다. 여기서 단일 명령어 규모는 여전히 16x8x8이고, 단일 Tile의 규모는 32x32x16으로 확장되며, 동시에 스레드 수도 32에서 256으로 확장된다.
 
-![](img/cutlass-notes-b32bee26/039.png)
+![](img/cute/cutlass-notes-b32bee26/039.png)
 
 ## 3.1 make_tiled_mma API
 
@@ -1226,7 +1226,7 @@ using TiledMMA = decltype(make_tiled_mma(MMA_op{}));
 
 앞서 말했듯이 단일 명령어를 Tile로 확장하는 데는 두 가지 착상이 있다. 하나는 warp 수를 확장하는 것이고 다른 하나는 각 warp가 계산하는 mma 명령어 수를 확장하는 것이다. 따라서 스레드의 확장과 mma 명령어의 확장을 나타낼 새로운 인자 두 개를 추가해야 한다.
 
-![그림8: make_tiled_mma API 도해](img/cutlass-notes-b32bee26/040.jpg)
+![그림8: make_tiled_mma API 도해](img/cute/cutlass-notes-b32bee26/040.jpg)
 
 코드는 아래와 같다. `make_tiled_mma`에 새로 추가된 두 인자가 각각 `MMAThrLayout`과 `MMATileLayout`, 즉 스레드의 (M, N, K) 차원 확장 방식과 단일 Tile의 전체 규모임을 알 수 있다. 그중 `kMmaThrExpandM/N/K`는 스레드의 `(M, N, K)` 차원 확장 규모를 제어하고, `kMmaValExpandM/N/K`는 mma 명령어의 `(M, N, K)` 차원 확장 규모를 제어한다.
 
@@ -1256,7 +1256,7 @@ using TiledMMA = decltype(make_tiled_mma(MMA_op{}, MMAThrLayout{}, MMATileLayout
 
 이제 확장을 거친 TiledMMA를 출력해 볼 수 있다. 단일 명령어 MMA Atom과 비교했을 때 우리가 구현한 Tiled MMA가 (M,N,K) 세 차원에서 각각 (2,4,2)배 확장되었음을 명확히 볼 수 있다. 그중 **M, N 차원의 확장은 스레드 확장**이므로 스레드 번호가 T0-T31에서 T0-T255로 확장되고(그림에서 일부 행렬 원소는 T를 하나만 표시했지만 실제로는 여러 스레드가 읽을 수도 있다), K 차원은 mma 명령어 확장이라 스레드 입장에서는 사실 레지스터 확장이다. 따라서 K 차원의 T는 변하지 않고 V의 범위가 2배로 늘어났다.
 
-![그림9: Tiled MMA 도식](img/cutlass-notes-b32bee26/041.jpg)
+![그림9: Tiled MMA 도식](img/cute/cutlass-notes-b32bee26/041.jpg)
 
 `make_tiled_mma`에 새로 추가된 두 인자는 각각 `MMAThrLayout`과 `MMATileLayout`이다. 이어서 그 세부 사항을 자세히 분석한다.
 
@@ -1267,7 +1267,7 @@ using TiledMMA = decltype(make_tiled_mma(MMA_op{}, MMAThrLayout{}, MMATileLayout
 
 > 여기서 독자가 생각해 볼 작은 문제가 하나 있다. 왜 우리는 보통 MMAThrLayout의 K 차원을 1로 두는가? 즉 왜 K 차원에서는 스레드를 확장하지 않는가?
 
-![](img/cutlass-notes-b32bee26/042.png)
+![](img/cute/cutlass-notes-b32bee26/042.png)
 
 `MMATileLayout`은 길이가 3인 tuple로 각각 M, N, K 세 차원의 배열을 나타내며, 각 차원의 배열은 하나의 Layout으로 표현된다. 어떤 차원의 Layout을 조정하면 그 차원에서 각 MMA Atom의 배열 순서(Permutation)를 바꿀 수 있다.
 
@@ -1515,7 +1515,7 @@ D 레지스터는 F32지만 출력 C 행렬은 BF16이므로 먼저 변환한 �
  ↑미리 발행해 메모리 지연을 감춘다   ↑데이터가 준비된 뒤 직렬로 누산      ↑변환 후 써 넣기
 ```
 
-![그림10: Tiled MMA 의 일부 SASS code](img/cutlass-notes-b32bee26/043.png)
+![그림10: Tiled MMA 의 일부 SASS code](img/cute/cutlass-notes-b32bee26/043.png)
 
 ## 4. 정리
 
@@ -1577,7 +1577,7 @@ vectorized 메모리 접근의 목적은 더 긴 길이의 메모리 접근 명�
 
 64bit 하나가 아니라 32bit 둘로 메모리 접근 명령어를 쓴 것은, Minimal GEMM 시나리오에서 두 32bit 데이터 블록이 연속적이지 않기 때문이다. 이 두 데이터 블록을 연속적으로 저장할 수단이 있다면 컴파일러는 더 긴 64bit 복사 명령어를 골랐을 것이다.
 
-![그림1: LDG.E 2개로 A 행렬 조각의 복사를 완료하기](img/cutlass-notes-b32bee26/044.jpg)
+![그림1: LDG.E 2개로 A 행렬 조각의 복사를 완료하기](img/cute/cutlass-notes-b32bee26/044.jpg)
 
 따라서 메모리 접근 로직을 작성할 때는 단일 스레드의 접근 데이터를 최대한 연속적으로 만들어 더 긴 길이의 메모리 접근 명령어를 사용하도록 해야 한다.
 
@@ -1591,7 +1591,7 @@ vectorized 메모리 접근의 목적은 더 긴 길이의 메모리 접근 명�
 
 아래 그림처럼 0-384 구간의 384 bytes 데이터를 읽을 때 하드웨어는 실제로 `384 / 32 = 12` 번의 transaction을 수행한다. 여러 sector에 걸친 데이터를 읽거나 연속적이지 않은 여러 sector를 읽으면, 접근된 sector의 **모든 데이터**가 실제로 읽히고 각 단계의 캐시에 써진다.
 
-![그림2: 각종 메모리 접근 상황 예시](img/cutlass-notes-b32bee26/045.jpg)
+![그림2: 각종 메모리 접근 상황 예시](img/cute/cutlass-notes-b32bee26/045.jpg)
 
 > 비교적 이른 아키텍처의 GPU 하드웨어(SM60 이하)에서는 메모리 접근이 L1 Cache를 거칠 때 한 번의 transaction의 접근 데이터량이 128 bytes가 된다.
 >
@@ -1601,15 +1601,15 @@ vectorized 메모리 접근의 목적은 더 긴 길이의 메모리 접근 명�
 
 우리는 앞 편 노트 마지막에서 Tiled MMA 연산자에 메모리 접근 문제가 있음을 발견했다. ncu가 일부 명령어가 GMEM 데이터를 필요 이상으로 읽었다고 알려 주었다. 이어서 위의 지식을 활용해 이 문제가 생긴 원인을 분석한다.
 
-![그림3: Tiled MMA 의 메모리 접근 문제](img/cutlass-notes-b32bee26/046.jpg)
+![그림3: Tiled MMA 의 메모리 접근 문제](img/cute/cutlass-notes-b32bee26/046.jpg)
 
 A 행렬의 메모리 접근을 예로 들어 첫 번째 warp의 메모리 접근 상황에 주목해 보자. 아래 그림에서 첫 번째 warp인 T0-T31이 필요로 하는 데이터가 모두 A(0,0)과 A(0,1) 영역에 있고, 각 행의 길이가 마침 sector 하나의 길이인 32 bytes와 같다는 것을 알 수 있다. 따라서 최적의 경우 A 행렬 데이터를 읽는 데는 sector 16개만 읽으면 되며, 곧 transaction 16번을 수행하면 된다.
 
-![그림4: A 행렬의 sector 분포](img/cutlass-notes-b32bee26/047.jpg)
+![그림4: A 행렬의 sector 분포](img/cute/cutlass-notes-b32bee26/047.jpg)
 
 각 스레드가 연속적이지 않은 데이터 블록 4개를 가지므로 실제 메모리 접근은 `LDG.E` 명령어 4개로 완료된다. A(0,0) 이라는 데이터 블록에 대해서는 `LDG.E` 명령어 2개로 GMEM을 읽어야 한다.
 
-![그림5: LDG.E 의 메모리 접근 비연속성](img/cutlass-notes-b32bee26/048.jpg)
+![그림5: LDG.E 의 메모리 접근 비연속성](img/cute/cutlass-notes-b32bee26/048.jpg)
 
 그런데 각 `LDG.E`의 접근 대상은 연속적이지 않은 메모리 영역이라, `LDG.E` 하나가 sector 8개의 데이터를 읽게 된다. 실제로 필요한 데이터는 읽은 데이터의 절반뿐인데도 말이다. 따라서 `LDG.E` 4개는 실제로 sector 32개의 데이터를 읽으며, 실제 GMEM 접근량이 두 배가 된다(Cache가 있으므로 메모리 접근 시간의 증가는 두 배보다는 작을 것이다). 이것이 ncu가 각 `LDG.E`의 GMEM 접근 중 50%가 불필요하다고 알려 준 이유다.
 
@@ -1658,7 +1658,7 @@ for (int i = 0; i < size(src); ++i) {
 
 위의 복사 과정을 그림 하나로 나타내면 다음과 같다.
 
-![그림6: CuTe 의 Tensor 복사 기본 원리](img/cutlass-notes-b32bee26/049.jpg)
+![그림6: CuTe 의 Tensor 복사 기본 원리](img/cute/cutlass-notes-b32bee26/049.jpg)
 
 그러나 이런 복사 모드가 모든 Tensor 복사 시나리오를 포괄하지는 못한다. **소스 좌표와 목표 좌표가 같지 않은 모든 경우에는 이런 간편한 복사 방법** `copy(dst, src)` **를 사용할 수 없다**.
 
@@ -1745,7 +1745,7 @@ for (int v = 0; v < size(src_frg); ++v) {
 
 그래서 복사에 참여하는 데이터에 번호(ID)를 매길 수 있다. 예컨대 $0$부터 $N - 1$까지 번호를 매기고, $(src_t, src_v)$에서 $\mathrm{ID}$로, $(dst_t, dst_v)$에서 $\mathrm{ID}$로 가는 매핑을 각각 세우면 $(src_t, src_v) \leftrightarrow \mathrm{ID} \leftrightarrow (dst_t, dst_v)$ 의 연결을 세울 수 있다. 그리고 이 연결은 **필연적으로 복사 명령어의 본질적 특성이 결정한다**. 어느 스레드의 어느 데이터가 어느 스레드의 어느 데이터로 복사될 수 있는지는 복사 명령어만이 확정할 수 있고 프로그램은 이런 매핑을 바꿀 수 없다. 따라서 위의 두 매핑은 반드시 CopyAtom에 기록되어 있다.
 
-![그림7: SrcLayout 과 DstLayout](img/cutlass-notes-b32bee26/050.jpg)
+![그림7: SrcLayout 과 DstLayout](img/cute/cutlass-notes-b32bee26/050.jpg)
 
 CopyAtom에 기록된 두 Layout 매핑은 각각 **SrcLayout**과 **DstLayout**이라고 부른다.
 
@@ -1758,7 +1758,7 @@ CopyAtom에 기록된 두 Layout 매핑은 각각 **SrcLayout**과 **DstLayout**
 
 그리하여 $(src_t, src_v)$를 $(dst_t, dst_v)$로 매핑하거나, 반대로 $(dst_t, dst_v)$를 $(src_t, src_v)$로 매핑하면 **src와 dst의 TV 공간을 통일**할 수 있다. 즉 이들의 $(t, v)$ 공간을 통일하고, 다시 **동일한** TV Layout으로 이를 idx로 매핑하는 것이다. 이렇게 하면 $(src_t, src_v)$와 $(dst_t, dst_v)$를 같은 idx로 매핑한다는 목표가 달성된다.
 
-![그림8: src (t, v) 와 dst (t, v) 를 같은 idx 로 매핑하기](img/cutlass-notes-b32bee26/051.jpg)
+![그림8: src (t, v) 와 dst (t, v) 를 같은 idx 로 매핑하기](img/cute/cutlass-notes-b32bee26/051.jpg)
 
 그렇다면 src $(t, v)$를 dst $(t, v)$로 바꿀 것인가, 아니면 dst $(t, v)$를 src $(t, v)$로 바꿀 것인가? 원리상으로는 둘 다 가능하다. 결국 $(t, v)$만 맞추면 되고, 이 $(t, v)$가 구체적으로 src 공간에 있는지 dst 공간에 있는지는 그리 중요하지 않다. **선택 원칙은 이것이다.** 다른 변환 방식을 고르면 기록해야 할 TV Layout도 달라진다. 실제로는 어느 TV Layout이 얻기 쉽거나 계산하기 쉬운지에 따라 그것을 쓰고, 그에 대응하는 $(t, v)$ 매핑 방식을 고른다.
 
@@ -1784,7 +1784,7 @@ $R=S$ 일 때 $s=r$ 이다. 즉 Ref TV Layout이 곧 Src TV Layout이다. $R=D$ 
 
 이상이 TiledCopy의 핵심 원리다. 그림 하나로 정리해 보자.
 
-![그림9: TiledCopy 의 핵심 원리도](img/cutlass-notes-b32bee26/052.jpg)
+![그림9: TiledCopy 의 핵심 원리도](img/cute/cutlass-notes-b32bee26/052.jpg)
 
 ---
 
@@ -1904,7 +1904,7 @@ copy(g2r_tiled_copy_a, tAgA, tArA);
 
 ### 3.3 make_tiled_copy API
 
-![그림10: make_tiled_copy API](img/cutlass-notes-b32bee26/053.jpg)
+![그림10: make_tiled_copy API](img/cute/cutlass-notes-b32bee26/053.jpg)
 
 `make_tiled_copy`는 `make_tiled_mma`와 유사하게 세 개의 인자를 받으며, 각각 **CopyAtom**, **ThrLayout**, **ValLayout**이다. 그중 ThrLayout은 스레드 확장 방식을, ValLayout은 데이터 확장 방식을 나타낸다. API 내부에서는 ThrLayout과 ValLayout에 근거해 TiledCopy에 필요한 Ref TV Layout과 복사 규모 `Tiler_MN`을 계산해 낸다.
 
@@ -2013,7 +2013,7 @@ latex로 TiledCopyA를 시각화하면 다음 그림을 얻는다. 그중 왼쪽
 
 두 MN Layout이 완전히 동일하다는 것은 복사에 스레드 간 데이터 교환이 없고 각 스레드가 자기가 필요한 데이터의 복사 작업만 담당한다는 뜻이다. 핵심 원리에 따르면 $s=d$ 는 $S=D$ 와 등가이므로, 우리가 쓴 복사 명령어의 SrcLayout과 DstLayout도 완전히 동일하다. 이 점은 위의 metadata에서도 확인할 수 있다.
 
-![그림11: TiledCopy latex 시각화](img/cutlass-notes-b32bee26/054.jpg)
+![그림11: TiledCopy latex 시각화](img/cute/cutlass-notes-b32bee26/054.jpg)
 
 이번 편 예제 코드의 PTX와 SASS는 변화가 없으므로 여기서는 따로 분석하지 않는다.
 
@@ -2053,7 +2053,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 ### 1.1 확장 방식과 루프 차원
 
-![그림1: Block MMA 개념도](img/cutlass-notes-b32bee26/055.jpg)
+![그림1: Block MMA 개념도](img/cute/cutlass-notes-b32bee26/055.jpg)
 
 단일 Tile의 규모는 SM의 레지스터 크기에 제한되므로, 행렬 연산 규모를 계속 키우려면 Tile을 단위로 복사와 MMA 연산을 루프로 실행해야 한다.
 
@@ -2079,7 +2079,7 @@ Tile을 루프로 계산함으로써 제한된 레지스터로도 더 큰 규모
 
 그런데 Tile을 루프로 복사하는 과정에서 일부 Tile의 데이터가 여러 번 중복해서 읽힌다는 점에 주목하게 된다. 예를 들어 아래 그림에서 Tile1과 Tile2는 같은 A의 Tile 데이터를 사용하는데, 위 코드를 실행하면 이 데이터가 중복 접근되어 GMEM의 접근량이 늘어나고 결과적으로 GEMM 연산자 성능에 영향을 준다.
 
-![그림2: Tile 메모리 접근에 GMEM 중복 읽기 문제가 있다](img/cutlass-notes-b32bee26/056.jpg)
+![그림2: Tile 메모리 접근에 GMEM 중복 읽기 문제가 있다](img/cute/cutlass-notes-b32bee26/056.jpg)
 
 이 문제를 피하려면 **Block 전체의 데이터를 먼저 GMEM에서 SMEM으로 복사해야 한다**. 루프로 복사할 때 SMEM에서 같은 데이터를 읽으면 훨씬 빠르다. SMEM 관련 복사 연산을 어떻게 완료하는지는 다음 편 노트에서 소개한다.
 
@@ -2259,7 +2259,7 @@ gemm(tiled_mma, tCrC, tCrA, tCrB, tCrC);
 
 이는 PTX code와 SASS code에서 확인할 수 있다. 위와 같은 방식으로 작성하더라도 실제로 하드웨어는 여전히 복사 명령어와 계산 명령어를 교차 실행한다.
 
-![그림3: Block MMA 의 PTX / SASS code](img/cutlass-notes-b32bee26/057.jpg)
+![그림3: Block MMA 의 PTX / SASS code](img/cute/cutlass-notes-b32bee26/057.jpg)
 
 여기서 독자에게 또 하나의 질문이 생길 수 있다. 컴파일러가 재배치를 해 준다면 우리가 copy와 mma 루프를 수동으로 제어하는 의미는 어디에 있는가? 컴파일러가 전능하지는 않기 때문이다. 루프를 수동으로 제어하면 어느 정도까지 copy와 mma의 계산 파이프라인을 제어할 수 있어, 레지스터로 복사하는 연산이 최대한 mma 계산에 가려지게 할 수 있고, 이는 미세한 성능 향상을 가져다준다. 또한 컴파일러가 직접 최적화할 수 없는 SMEM 파이프라인에 대해서는 반드시 루프를 손으로 작성해 파이프라인을 구현해야 한다.
 
@@ -2293,13 +2293,13 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 동시에 GMEM에서 데이터를 옮길 때 중복 메모리 접근 현상이 있음을 관찰했는데, SMEM의 도움을 받아 연산자의 메모리 접근을 한층 더 최적화할 수 있다.
 
-![그림1: Tile 메모리 접근에 GMEM 중복 읽기 문제가 있다](img/cutlass-notes-b32bee26/058.jpg)
+![그림1: Tile 메모리 접근에 GMEM 중복 읽기 문제가 있다](img/cute/cutlass-notes-b32bee26/058.jpg)
 
 노트 (4)에서도 복사 명령어에 잉여 메모리 접근 문제가 나타났는데, SMEM을 도입하지 않고서는 좋은 해결 방안이 없었다.
 
 [CUTLASS 노트 (4): Tiled Copy](https://zhuanlan.zhihu.com/p/1968745447741972494)
 
-![그림2: 노트 (4) 의 GMEM 잉여 메모리 접근 문제](img/cutlass-notes-b32bee26/059.jpg)
+![그림2: 노트 (4) 의 GMEM 잉여 메모리 접근 문제](img/cute/cutlass-notes-b32bee26/059.jpg)
 
 이번 편 노트는 Block 차원의 행렬 연산을 이어 가면서 SMEM이라는 새로운 메모리 계층을 도입하고, SMEM 특성을 충분히 활용해 GMEM, SMEM, RMEM 사이의 2단계 복사를 어떻게 완료하여 연산자 성능을 한층 더 끌어올릴지 탐구한다.
 
@@ -2309,7 +2309,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 **공유 메모리(Shared Memory, SMEM)**는 GPU의 각 SM 내부에 있는 저장 영역이며, 물리적으로 L1 캐시와 저장 공간을 공유한다. 높은 대역폭을 제공하기 위해 SMEM은 물리적으로 **폭이 같고 동시에 접근 가능한 32개의 메모리 모듈**로 나뉘어 있으며, 이 모듈들을 **Bank**라고 부른다. 보통 각 Bank의 폭은 4 bytes다. SMEM의 지연은 global memory인 GMEM보다 훨씬 낮고 대역폭도 훨씬 높기 때문에, 빈번히 접근해야 하는 데이터를 자주 담아 둔다.
 
-![그림3: GPU 메모리 계층（그림 출처는 FA 논문）](img/cutlass-notes-b32bee26/060.jpg)
+![그림3: GPU 메모리 계층（그림 출처는 FA 논문）](img/cute/cutlass-notes-b32bee26/060.jpg)
 
 > 각 thread block의 SMEM 공간 크기는 kernel launch 전에 동적으로 지정할 수 있지만 상한이 있다. SM 아키텍처에 따라 단일 thread block이 할당받을 수 있는 최대 SMEM 공간도 보통 다르다. 예를 들어 SM80 아키텍처는 163 KB, SM90/SM100 아키텍처는 227 KB다.
 
@@ -2341,7 +2341,7 @@ CUTLASS에서는 일반적으로 데이터에 메모리 배치 변환(**Swizzlin
 
 GMEM -> RMEM 복사에 SMEM이라는 계층을 추가하고 나면, GMEM -> SMEM 그리고 SMEM -> RMEM 이라는 두 계층 복사의 TiledCopy를 어떻게 구성할지 고민해야 한다.
 
-![그림4: Global, Block, Tile 의 2단계 Tiling 과 GMEM, SMEM, RMEM 의 2단계 복사 사이의 대응 관계](img/cutlass-notes-b32bee26/061.jpg)
+![그림4: Global, Block, Tile 의 2단계 Tiling 과 GMEM, SMEM, RMEM 의 2단계 복사 사이의 대응 관계](img/cute/cutlass-notes-b32bee26/061.jpg)
 
 우리가 지금 해결해야 할 문제 규모는 `(128, 128, 64)` 라는 단일 Block 크기뿐이다. 단일 Block이 SMEM에 들어갈 수 있을 때는 한 번의 복사로 GMEM 위의 Block 데이터를 SMEM으로 옮길 수 있으며, 이것이 첫 번째 단계의 복사다. 그리고 SMEM -> RMEM 이라는 두 번째 단계의 복사는 사실 이전의 GMEM -> RMEM 과 유사하게, 삼중 루프로 SMEM의 각 Tile을 하나씩 RMEM으로 옮긴 다음 TiledMMA에 넘겨 행렬 연산을 하면 된다. 위 그림은 여기서 설명한 2단계 복사 과정을 보여 준다.
 
@@ -2377,11 +2377,11 @@ TiledCopy를 만드는 `make_tiled_copy` API를 되짚어 보면 세 개의 인�
 2. **ThrLayout**, 즉 몇 개의 스레드가 복사에 참여하는지, 그리고 스레드 배치는 어떠한지
 3. **ValLayout**, 즉 각 스레드가 몇 개의 데이터 원소를 복사하는지, 그리고 데이터 원소 배치는 어떠한지
 
-![그림5: make_tiled_copy API](img/cutlass-notes-b32bee26/062.jpg)
+![그림5: make_tiled_copy API](img/cute/cutlass-notes-b32bee26/062.jpg)
 
 명령어 차원에서는 통상적인 `AutoVectorizingCopy`를 고를 수 있다. SM80에 GMEM -> SMEM 비동기 복사 명령어 `cp.async`가 새로 추가되었다는 점을 고려하면, 이 명령어는 GMEM에서 L2를 거쳐 SMEM으로 바로 복사할 수 있어 RMEM에서 데이터를 중계하는 것을 피할 수 있으므로 SM80에서는 보통 최적의 선택이다.
 
-![그림6: cp.async 복사 원리（그림 출처는 NVIDIA Ampere 백서）](img/cutlass-notes-b32bee26/063.jpg)
+![그림6: cp.async 복사 원리（그림 출처는 NVIDIA Ampere 백서）](img/cute/cutlass-notes-b32bee26/063.jpg)
 
 단일 `cp.async` 명령어는 128 bits의 vectorized 복사를 지원한다. 따라서 첫 번째 단계 복사의 명령어와 데이터 원소 타입은 다음과 같이 지정한다.
 
@@ -2594,7 +2594,7 @@ Tensor sO = make_tensor(make_smem_ptr((OutType *)Optr_smem), SmemLayoutO{});    
 
 노트 (4)에서 우리는 MMA가 요구하는 데이터 배치의 영향에 제약을 받아 GMEM에서 RMEM으로 가는 복사에서 병합 메모리 접근을 할 수 없었다. SMEM을 도입한 뒤에는 GMEM에서 SMEM으로의 복사가 더 이상 MMA 명령어가 요구하는 데이터 배치와 결부되지 않으므로, 더 긴 워드 길이의 복사 명령어로 복사를 완료할 수 있고 앞서의 잉여 메모리 접근 문제도 해결된다.
 
-![그림7: ncu 가 보여 주는 LDGSTS 명령어 8개](img/cutlass-notes-b32bee26/064.jpg)
+![그림7: ncu 가 보여 주는 LDGSTS 명령어 8개](img/cute/cutlass-notes-b32bee26/064.jpg)
 
 ncu가 보여 주는 SASS 코드에서 `cp.async`가 SASS 코드의 `LDGSTS` 명령어에 대응하고, ncu가 이 명령어의 메모리 접근 문제를 보고하지 않았음을 볼 수 있다. 분석해 보면 우리에게는 총 256개의 스레드가 있고 A, B 행렬의 규모는 모두 `(128, 64)` 이므로, 각 스레드는 GMEM에서 A 행렬 원소 32개와 B 행렬 원소 32개를 복사해야 하며 이는 `4 + 4 = 8` 개의 `cp.async` 명령어에 대응한다. 이는 그림의 `LDGSTS` 명령어 8개와 정확히 일치한다.
 
@@ -2602,19 +2602,19 @@ ncu가 보여 주는 SASS 코드에서 `cp.async`가 SASS 코드의 `LDGSTS` 명
 
 A 행렬을 예로 들어 `(16, 64)` 형상에서 SMEM의 메모리 배치 상황을 보여 주고, 그림에 복사 명령어의 커버 범위, transaction, wavefront, bank 관련 정보를 표시했다. 현재 `LDGSTS` 명령어가 양호한 메모리 접근 연속성을 갖추어 명령어 하나가 4개의 transaction으로 병합되고, transaction 1개가 마침 bank 32개에 써 넣으며 bank conflict가 생기지 않았음을 알 수 있다. 따라서 첫 번째 단계 복사의 성능은 이미 최적에 도달했다.
 
-![그림8: GMEM 에서 SMEM 으로 복사하는 과정에서 SMEM 의 쓰기 메모리 배치](img/cutlass-notes-b32bee26/065.jpg)
+![그림8: GMEM 에서 SMEM 으로 복사하는 과정에서 SMEM 의 쓰기 메모리 배치](img/cute/cutlass-notes-b32bee26/065.jpg)
 
 ### 4.2 SMEM 에서 RMEM 으로의 복사
 
 그러나 두 번째 단계 복사에서는 여전히 MMA가 요구하는 데이터 배치에 따라 스레드의 복사를 수행해야 한다. 따라서 SMEM에서 A 행렬의 한 Tile 데이터(규모는 `32x32`)를 읽을 때는 다음과 같은 상황이 된다.
 
-![그림9: SMEM -> RMEM 과정에서 SMEM 의 읽기 메모리 배치](img/cutlass-notes-b32bee26/066.jpg)
+![그림9: SMEM -> RMEM 과정에서 SMEM 의 읽기 메모리 배치](img/cute/cutlass-notes-b32bee26/066.jpg)
 
 이 경우 SMEM에서 데이터를 읽는 워드 길이가 MMA에 의해 32 bits로 제한되므로 `ld.shared.u32` / `LDS` 명령어만 사용할 수 있다. warp의 각 `ld.shared.u32` 메모리 접근 명령어가 모두 하나의 transaction으로 병합되지만, 이 transaction에서 같은 bank의 데이터 8개에 접근하므로 실제로는 wavefront 8개가 유발되고 각 wavefront가 16 bytes의 데이터를 병렬로 처리한다는 것을 알 수 있다.
 
 이상적인 경우 하나의 transaction은 wavefront 하나만 병렬 처리하면 되지만, Bank Conflict가 생긴 상황에서는 wavefront 8개를 썼으므로 그중 `7/8` 의 wavefront가 잉여다. Ncu는 Bank Conflict가 발생한 명령어 자리에서 메모리 접근 문제를 알려 준다.
 
-![그림10: ncu 는 SMEM 의 메모리 접근 문제, 예를 들어 Bank Conflict 를 보고한다](img/cutlass-notes-b32bee26/067.jpg)
+![그림10: ncu 는 SMEM 의 메모리 접근 문제, 예를 들어 Bank Conflict 를 보고한다](img/cute/cutlass-notes-b32bee26/067.jpg)
 
 위 그림에서 각 SMEM 메모리 접근 명령어에 대응하는 **실제 wavefront 개수(L1 Wavefronts Shared)**, **이상적인 wavefront 개수(L1 Wavefronts Shared Ideal)**, 그리고 **둘의 차이(L1 Wavefronts Shared Excessive)**도 볼 수 있다. 차이가 0이 아니면 그 명령어에 Bank Conflict 문제가 발생했다는 뜻이다.
 
@@ -2624,7 +2624,7 @@ A 행렬을 예로 들어 `(16, 64)` 형상에서 SMEM의 메모리 배치 상�
 
 ncu에서는 SMEM 메모리 접근 상황의 표를 조회할 수 있으며, 아래 그림과 같다.
 
-![그림11: ncu 가 보여 주는 SMEM 메모리 접근 지표 통계](img/cutlass-notes-b32bee26/068.jpg)
+![그림11: ncu 가 보여 주는 SMEM 메모리 접근 지표 통계](img/cute/cutlass-notes-b32bee26/068.jpg)
 
 이어서 이 지표들이 어떻게 계산되어 나오는지 분석한다.
 
@@ -2675,7 +2675,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 그 원인을 따져 보면 warp가 8x8 행렬에 병합해 접근하는데, 이 행렬의 원소가 모두 Bank 0에서 Bank 3에 위치하기 때문이다. 이상적인 경우 이 8x8 행렬로 구성된 transaction은 하나의 wavefront에서 완료되어야 하지만, Bank Conflict 때문에 wavefront 8개가 있어야 메모리 접근을 완료할 수 있다.
 
-![](img/cutlass-notes-b32bee26/069.jpg)
+![](img/cute/cutlass-notes-b32bee26/069.jpg)
 
 Bank Conflict 문제를 어떻게 해결해야 할까? 핵심 착상은 한 warp가 한 번의 transaction에서 접근하는 데이터를 서로 다른 32개 Bank에 분포시키는 것이며, 여기서 Core Matrix라는 개념이 등장한다.
 
@@ -2691,7 +2691,7 @@ Core Matrix 하나의 크기(128B)가 마침 한 번의 transaction의 메모리
 
 그림을 그려 보여 주기 편하도록, 특별한 설명이 없는 한 **이하에서는 Core Matrix가 K-major, 즉 행 방향 연속이고 각 네모 칸이 16B짜리 cell 하나를 나타낸다고 기본 가정한다**. 원소가 16bits인 경우라면 원소 8개가 cell 1개를 이룬다. 따라서 (8, 64) 행렬에 대해 cell로 표현한 배치를 다음과 같이 그릴 수 있다.
 
-![](img/cutlass-notes-b32bee26/070.jpg)
+![](img/cute/cutlass-notes-b32bee26/070.jpg)
 
 각 cell 안의 숫자는 메모리 주소를 나타낸다. 예를 들어 첫 행의 cell 0-7은 이들이 SMEM의 앞쪽 cell 8개에 놓인다는 뜻이며, 이는 마침 SMEM 한 행의 32 Banks 크기와 같다. 특히 유의할 점은 위 그림이 마침 이 행렬의 cell 논리 배치와 SMEM의 메모리 배치를 동시에 나타내고 있다는 것인데, 아래에서는 이 둘을 구분해 보여 주겠다.
 
@@ -2701,7 +2701,7 @@ Core Matrix 하나의 크기(128B)가 마침 한 번의 transaction의 메모리
 
 1. **Interleaving**: Core Matrix를 같은 행의 32 Banks 위에 펼쳐 놓는다.
 
-![](img/cutlass-notes-b32bee26/071.jpg)
+![](img/cute/cutlass-notes-b32bee26/071.jpg)
 
 이 구현이 가장 직접적이고 간단하다. Core Matrix 하나의 8개 행이 각각 16B cell 하나씩을 차지해 자연스럽게 서로 다른 Bank에 놓이므로, SMEM에서 Core Matrix 하나를 **읽는** 데는 Bank Conflict가 전혀 없다.
 
@@ -2713,7 +2713,7 @@ Core Matrix 하나의 크기(128B)가 마침 한 번의 transaction의 메모리
 
 2. **Padding**: SMEM에서 32 Banks마다 한 구간의 메모리 공간을 비워 두고 아무 데이터도 채우지 않는다. 이렇게 하면 원래 같은 열의 같은 Bank에 있던 데이터가 이제는 서로 다른 Bank에 놓이게 된다.
 
-![](img/cutlass-notes-b32bee26/072.jpg)
+![](img/cute/cutlass-notes-b32bee26/072.jpg)
 
 이 방식은 구현이 비교적 간단하다. SMEM 주소에 offset을 더하거나, 2차원 SMEM 배열을 만들 때 K 차원의 shape에 cell 하나의 크기를 더하면 된다. padding이 GMEM과 SMEM 모두에 좋은 메모리 접근 성질을 줄 수는 있지만 SMEM 공간의 일부를 낭비해 occupancy를 떨어뜨리기 쉽다. 더 결정적인 것은 복사 포인터의 128B 정렬 성질을 깨뜨려 최신 하드웨어 명령어 일부에는 쓸 수 없다는 점이다. 그래서 이런 구현은 예전 코드에서만 볼 수 있다.
 
@@ -2721,7 +2721,7 @@ Core Matrix 하나의 크기(128B)가 마침 한 번의 transaction의 메모리
 
 3. **Swizzling**: Core Matrix 각 행의 cell을 다른 Core Matrix의 대응 행의 cell과 행 간 재배열하여, 최종적으로 임의의 Core Matrix가 서로 다른 32 Bank에 분포하게 한다.
 
-![](img/cutlass-notes-b32bee26/073.jpg)
+![](img/cute/cutlass-notes-b32bee26/073.jpg)
 
 SMEM의 배치로 말하자면 임의의 **라틴 방진**(즉 각 행과 각 열에 같은 색 cell이 없는 것) 하나만 만들어 내면 되므로, Swizzle의 배치 방식은 유일하지 않다. 구체적으로 오른쪽 그림에서 임의의 두 행이나 두 열을 교환해도 요구 조건을 만족한다.
 
@@ -2733,7 +2733,7 @@ SMEM의 배치로 말하자면 임의의 **라틴 방진**(즉 각 행과 각 �
 
 위에서는 행렬의 cell 형상이 8x8이라고 가정했다. 그러면 행렬의 형상이 8x8보다 크면 어떻게 해야 할까? 이 8x8 Pattern을 하나의 **Swizzle Layout Atom**으로 삼아 행과 열 차원에서 이 Atom을 반복하기만 하면 된다.
 
-![](img/cutlass-notes-b32bee26/074.jpg)
+![](img/cute/cutlass-notes-b32bee26/074.jpg)
 
 행렬의 형상이 8x8보다 작으면 또 어떻게 해야 할까? 먼저 행 차원이 8보다 작다면 남는 행을 잘라 내기만 하면 되고 메모리의 연속성이 깨지지 않는다. 그러나 열 차원이 8보다 작다면 남는 열을 단순히 잘라 낼 수 없다. cell이 이미 한 행 안에서 뒤섞여 있으므로 남는 열을 잘라 내면 SMEM 중간에 구멍이 생겨, GMEM에서 SMEM으로 쓰는 과정에 매우 불리하기 때문이다.
 
@@ -2749,19 +2749,19 @@ SMEM의 배치로 말하자면 임의의 **라틴 방진**(즉 각 행과 각 �
 
 **64B Swizzle Mode**는 일반적으로 열 차원 = 64B인 시나리오에 쓰이며, 그 형상은 다음과 같다.
 
-![](img/cutlass-notes-b32bee26/075.jpg)
+![](img/cute/cutlass-notes-b32bee26/075.jpg)
 
 **32B Swizzle Mode**는 일반적으로 열 차원 = 32B인 시나리오에 쓰이며, 그 형상은 다음과 같다.
 
-![](img/cutlass-notes-b32bee26/076.jpg)
+![](img/cute/cutlass-notes-b32bee26/076.jpg)
 
 그리고 **No Swizzling**, 즉 위에서 소개한 **Interleaving** 방안은 특수한 16B Swizzle Mode로 볼 수 있으며, 일반적으로 열 차원 = 16B인 시나리오에 쓰인다. 그 형상은 다음과 같다.
 
-![](img/cutlass-notes-b32bee26/077.jpg)
+![](img/cute/cutlass-notes-b32bee26/077.jpg)
 
 8x5짜리 80B Swizzle Mode를 설계할 수도 있을까? 물론 가능하다! 실제로 8x5 행렬이라면 `gcd(8,5)=1` 이므로 Swizzling을 할 필요가 전혀 없고, 논리 행렬의 cell을 순서대로 SMEM에 펼쳐 놓기만 해도 Bank Conflict를 피할 수 있다. 다만 이런 이형 Layout Atom은 정말 흔치 않고 하드웨어 명령어도 지원하지 않는다……
 
-![](img/cutlass-notes-b32bee26/078.jpg)
+![](img/cute/cutlass-notes-b32bee26/078.jpg)
 
 PTX 문서에는 96B Swizzle Mode와 128B Swizzle Mode의 32B atomicity + 8B flip 및 64B atomicity도 열거되어 있지만, 현재 이 몇 가지 Mode를 지원하는 하드웨어 명령어는 없다.
 
@@ -2789,7 +2789,7 @@ Swizzle은 계산 차원에서 본질적으로 하나의 매핑일 뿐이다. �
 
 Swizzle의 방식이 유일하지 않다는 것은 알고 있지만, 하드웨어 명령어가 제공하는 Swizzle Mode는 유일하게 확정된 Swizzle 방식이며 그것이 바로 위에서 보여 준 Layout이다. 128B Swizzle Mode를 예로 들어 보자.
 
-![](img/cutlass-notes-b32bee26/079.jpg)
+![](img/cute/cutlass-notes-b32bee26/079.jpg)
 
 Swizzle을 하지 않는다면 좌표 또는 index에서 SMEM address로 가는 매핑은 마침 항등 매핑 $f(i) = i$ 이다. Swizzle을 넣으면 매핑은 $\mathrm{Sw}_{\langle B,M,S \rangle} (f(i))$ 가 되고, 이는 $\mathrm{Sw}_{\langle B,M,S \rangle} (i)$ 와 등가다. 위 그림이 바로 128B Swizzle Mode에 대응하는 Sw<3,4,3> 의 매핑 관계다.
 
@@ -2824,7 +2824,7 @@ S가 음수가 아니라고 가정하면 Sw<B,M,S> 의 매핑은 다음 수학 �
 
 아래 그림처럼 공식은 크게 세 단계로 나뉜다. 1) AND 연산으로 YYY 부분, 즉 행 번호를 추출한다. 2) 행 번호를 우측 시프트하여 최하위 비트를 ZZZ와 정렬한다. 3) **행 번호와 열 번호의 하위 B bits를 XOR 연산한다**. 3단계가 실제로는 cell이 SMEM 같은 행 안에서 위치를 바꾸는 것임을 알 수 있다.
 
-![](img/cutlass-notes-b32bee26/080.jpg)
+![](img/cute/cutlass-notes-b32bee26/080.jpg)
 
 그렇다면 왜 XOR로 우리가 원하는 이런 Swizzle 매핑을 구현할 수 있을까?
 
@@ -2889,7 +2889,7 @@ s2r_atom_b = cute.make_copy_atom(ldm_op_ab, mB.element_type)
 
 ncu에서 마침내 Bank Conflicts의 카운트가 0이 된 것을 보게 되었다!
 
-![](img/cutlass-notes-b32bee26/081.jpg)
+![](img/cute/cutlass-notes-b32bee26/081.jpg)
 
 ## 7. 정리
 
@@ -2931,7 +2931,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 3단계 Tiling의 청사진에 따르면, 아래 그림처럼 Block에서 Global로 확장할 때 각 Block은 보통 output 행렬 분할 하나의 계산을 담당한다. 즉 A 행렬의 한 행 전체 (128, K)와 B 행렬의 한 열 전체 (K, 128) 사이의 GEMM을 계산한다. K 차원이 매우 클 수 있으므로 보통 계산에 참여하는 A/B 행렬 조각을 한 번 더 블록으로 나누고, 계산할 때 K 차원을 따라 Block MMA를 하나씩 루프로 계산하며 계산 결과를 이전 라운드 결과 위에 누산하여 단일 output 행렬 분할의 계산을 완료한다. 서로 다른 output 행렬 분할은 서로 다른 Block에 맡겨 병렬로 계산한다.
 
-![](img/cutlass-notes-b32bee26/082.jpg)
+![](img/cute/cutlass-notes-b32bee26/082.jpg)
 
 이때 여러 Block을 띄워 병렬 연산해야 하므로 연산자 launch의 시작 파라미터는 다음과 같이 바뀐다.
 
@@ -2964,7 +2964,7 @@ Block 크기를 (`BLK_M`, `BLK_N`, `BLK_K`)로 확정했다고 할 때, 실제 G
 
 C 행렬의 가장 오른쪽 아래 Block을 예로 들어 보자. 아래 그림에서 실제로 계산에 참여해야 하는 행렬 블록은 초록 부분이고 범위를 벗어난 영역은 빨간 부분임을 볼 수 있다.
 
-![](img/cutlass-notes-b32bee26/083.jpg)
+![](img/cute/cutlass-notes-b32bee26/083.jpg)
 
 초록 행렬 블록의 크기 (`m_max`, `n_max`)는 다음과 같이 계산해 낼 수 있다.
 
@@ -3000,7 +3000,7 @@ cC = cute.make_identity_tensor((BLK_M, BLK_N))
 tCcC = thr_g2s_c.partition_S(cC)  # (CPY, CPY_M, CPY_N)
 ```
 
-![](img/cutlass-notes-b32bee26/084.jpg)
+![](img/cute/cutlass-notes-b32bee26/084.jpg)
 
 따라서 **`tCgC`의 어떤 원소 (`cpy`, `cpy_m`, `cpy_n`)를 임의로 주더라도 같은 좌표를 `tCcC`에 먹이면 원래 `gC` 위에서의 2차원 좌표 (m, n)을 얻을 수 있다.**이렇게 해서 partition 후 원소가 원래 좌표를 찾지 못하는 문제가 해결되고, TiledCopy가 바뀌면 `tCcC`도 그에 맞게 바뀌므로 좌표 매핑 코드를 고칠 필요가 없다.
 
@@ -3029,7 +3029,7 @@ for m in cutlass.range_constexpr(cute.size(tCgC, mode=[1])):
             )
 ```
 
-![](img/cutlass-notes-b32bee26/085.jpg)
+![](img/cute/cutlass-notes-b32bee26/085.jpg)
 
 다만 여기에 문제가 하나 있다. **Copy Atom의 뒤쪽 원소 몇 개가 N 차원의 경계를 넘어서면 어떻게 해야 할까**?
 
@@ -3057,7 +3057,7 @@ A, B 두 행렬의 경우 상황이 조금 더 복잡하다. 우리는 복사를
 
 더 나은 방안은 A, B 행렬의 헤드 포인터를 K 차원의 역방향으로 오프셋하여 첫 번째 tile이 범위를 벗어나게 하고 마지막 tile이 정확히 오른쪽 경계에 맞아떨어지게 하는 것이다. 이렇게 하면 첫 번째 복사의 K 범위 초과만 처리하고 이후 복사에서는 처리하지 않아도 된다.
 
-![](img/cutlass-notes-b32bee26/086.jpg)
+![](img/cute/cutlass-notes-b32bee26/086.jpg)
 
 여기서는 Tensor의 헤드 포인터를 오프셋하는 데 쓰이는 CUTLASS의 `domain_offset` API를 사용하게 된다.
 
@@ -3112,11 +3112,11 @@ for rest_v in cutlass.range_constexpr(tApA_first.shape[0]):
             )
 ```
 
-![](img/cutlass-notes-b32bee26/087.jpg)
+![](img/cute/cutlass-notes-b32bee26/087.jpg)
 
 `tAgA`의 형상이 ((`atom_v`, `rest_v`), `CPY_M`, `CPY_K`) 인 것과 비교하면 `tApA_first`의 형상은 (`rest_v`, `CPY_M`, `CPY_K`) 이다. `atom_v` 라는 명령어 차원 내부에서는 predicate를 할 수 없기 때문이다. `tApA_first`에 대한 범위 초과 판별은 그 Copy Atom의 모든 원소로 broadcast 된다.
 
-![](img/cutlass-notes-b32bee26/088.jpg)
+![](img/cute/cutlass-notes-b32bee26/088.jpg)
 
 범위 초과 판별은 C 행렬과 유사하게, Identity Tensor를 구성해 원소 좌표를 얻은 다음 좌표가 범위를 벗어났는지에 따라 `tApA_first`의 해당 원소에 0 또는 1을 대입한다. A 행렬의 첫 번째 tile은 M 차원과 K 차원의 범위 초과를 동시에 판별해야 한다는 점에 유의하라.
 
@@ -3185,7 +3185,7 @@ for m in cutlass.range_constexpr(ccpy_m_size):
 cute.copy(s2g_tiled_copy_o, tOsO_s2g, tOgO_s2g, pred=tOpO_s2g)
 ```
 
-![](img/cutlass-notes-b32bee26/089.jpg)
+![](img/cute/cutlass-notes-b32bee26/089.jpg)
 
 ---
 
@@ -3193,17 +3193,17 @@ cute.copy(s2g_tiled_copy_o, tOsO_s2g, tOgO_s2g, pred=tOpO_s2g)
 
 ncu를 한번 돌려 보면 GEMM 규모가 커질 때 다시 대량의 "Bank Conflict"가 나타나는 것을 발견하게 된다.
 
-![](img/cutlass-notes-b32bee26/090.jpg)
+![](img/cute/cutlass-notes-b32bee26/090.jpg)
 
 이게 어찌 된 일일까? 실제로 ncu가 이 표에서 보여 주는 것은 L1과 SMEM의 Bank Conflict의 합이며, 대응하는 지표는 `l1tex__data_bank_conflicts_pipe_lsu_mem_shared` 이다.
 
 SMEM에 Bank Conflict가 있는지 따로 보려면 명령어 차원의 wavefront에 잉여 메모리 접근이 있는지를 봐야 한다. 따라서 정확한 지표는 `derived__memory_l1_wavefronts_shared_excessive`, 즉 `memory_l1_wavefronts_shared − memory_l1_wavefronts_shared_ideal` 이다. 노트 (6)에서 명령어 차원에서 본 것이 바로 이 지표들이다.
 
-![](img/cutlass-notes-b32bee26/091.jpg)
+![](img/cute/cutlass-notes-b32bee26/091.jpg)
 
 실제 상황은, 이번 편의 연산자는 SMEM 영역에서 Bank Conflict가 전혀 없으므로 보고된 모든 Bank Conflict가 전부 L1 Cache에서 온 것이다. 연산자를 여러 번 실행해 보면 L1이 Bank Conflict를 일으키는 횟수가 동적으로 변하는 것도 발견할 수 있다.
 
-![](img/cutlass-notes-b32bee26/092.jpg)
+![](img/cute/cutlass-notes-b32bee26/092.jpg)
 
 ---
 
@@ -3255,11 +3255,11 @@ Active Blocks/SM = min(
 
 ncu에서는 Occupancy 항목에서 위 공식이 열거한 5가지 block 상한값을 찾을 수 있고, 그중 최솟값이 각 SM이 최대로 수용할 수 있는 block 수다. 이로부터 어떤 자원이 Occupancy에 영향을 주는 병목인지 알 수 있다.
 
-![](img/cutlass-notes-b32bee26/093.jpg)
+![](img/cute/cutlass-notes-b32bee26/093.jpg)
 
 아래 그림에서 어떤 자원의 사용량이 바뀔 때 대응하는 Occupancy가 어떻게 변하는지도 볼 수 있다. 예를 들어 위의 예제에서 스레드당 레지스터 수가 132에서 128로 낮아지면 각 SM이 최대로 수용할 수 있는 block 수가 1에서 2가 되므로, 아래 그림에서 Occupancy가 두 배가 된 것을 볼 수 있다.
 
-![](img/cutlass-notes-b32bee26/094.jpg)
+![](img/cute/cutlass-notes-b32bee26/094.jpg)
 
 그렇다면 Occupancy를 최적화하고 싶다면 Occupancy에 영향을 주는 5가지 자원에서 손을 대어 각 block이 사용하는 자원 수량을 제어해야 한다. 그중 레지스터를 제외한 나머지 자원은 자원 수량을 정확히 제어할 수 있지만, 유독 레지스터 자원의 할당만은 컴파일러에 달려 있어 block이 정확히 몇 개의 레지스터를 쓸지 정밀하게 제어할 수 없다. 다만 이 block이 사용할 레지스터의 상한이 얼마인지를 컴파일러에 알려 줌으로써 컴파일러의 레지스터 할당 동작을 제어할 수는 있다.
 
@@ -3330,7 +3330,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 이번 편에서는 계속해서 ncu의 profile을 통해 가장 중요한 두 방향, 즉 계산과 통신(메모리 접근)을 최적화한다. ncu의 detail 화면은 주목해야 할 거의 모든 성능 지표 정보를 보여 준다.
 
-![](img/cutlass-notes-b32bee26/095.jpg)
+![](img/cute/cutlass-notes-b32bee26/095.jpg)
 
 일반적으로 화면의 앞쪽 두 항목, 즉 GPU Speed Of Light Throughput과 PM Sampling을 먼저 보고, 거시적 차원에서 정적·동적 두 측면으로 연산자 성능의 전반적 양상과 병목 유형을 파악한다. 그다음 거시적 분석 결과에 따라 아래쪽의 여러 항목에서 더 세밀한 지표를 이어서 본다. 연산자의 메모리 접근에 문제가 있음을 발견하면 Memory Workload Analysis 항목을 이어서 보면 된다. 명령어 스케줄링에 문제가 있음을 발견하면 Scheduler Statistics와 Warp State Statistics를 보면 된다.
 
@@ -3344,7 +3344,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 첫 번째 항목인 GPU Speed Of Light Throughput에는 두 가지 중요한 내용이 있다. 처리량과 Roofline Model이다. 먼저 Compute와 Memory의 처리량 상황을 본다.
 
-![](img/cutlass-notes-b32bee26/096.jpg)
+![](img/cute/cutlass-notes-b32bee26/096.jpg)
 
 이 연산자의 계산과 메모리 접근의 처리량이 모두 60% 이상임을 볼 수 있다. 일반적으로 Compute 처리량이 매우 높고 Memory 처리량이 비교적 낮으면 이 연산자의 성능 병목은 계산 유닛이나 실행 유닛에 있으며, 이를 **compute-bound**라고 부른다. Memory 처리량이 매우 높고 Compute 처리량이 낮으면 병목은 통신 대역폭이나 메모리 접근 유닛에 있으며, 이를 **memory-bound**라고 부른다. 두 처리량이 모두 비교적 낮으면 계산과 통신 명령어의 실행에 다른 요인이 영향을 주고 있다는 뜻이며, 이를 **latency-bound**라고 부른다. 이때 병목은 보통 Occupancy가 너무 낮거나 warp가 대부분의 시간 동안 어떤 이유로 실행을 멈추고(stall) 있는 것이다.
 
@@ -3352,7 +3352,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 그렇다면 이 처리량들은 어떻게 계산되어 나오는 것일까? 실제로 여기 표시되는 계산 처리량은 모든 계산 유닛과 명령어 실행 유닛의 실제 처리량과 이론 처리량 상한의 비율 중 최댓값이고, 메모리 접근 처리량은 모든 통신 pipe 및 데이터 이동·처리 유닛 처리량 비율의 최댓값이다. GPU Throughput Breakdown에서 어느 유닛의 처리량이 전체 Compute/Memory Throughput을 결정하는지 볼 수 있다.
 
-![](img/cutlass-notes-b32bee26/097.jpg)
+![](img/cute/cutlass-notes-b32bee26/097.jpg)
 
 위 그림에서 Tensor Core의 처리량이 전체 계산 처리량을 결정하고, LSU가 Wavefronts를 처리하는 처리량이 전체 통신 처리량을 결정한다는 것을 알 수 있다. 따라서 전체 계산/통신 처리량은 모든 계산/통신 유닛 처리량의 평균값이 아니라 최댓값이며, 이 점을 각별히 유의해야 한다.
 
@@ -3362,7 +3362,7 @@ CUTLASS 노트 시리즈의 길잡이와 글 목록은 다음에서 자세히 �
 
 Roofline Model은 연산자 병목 유형을 판단하는 고전적 모델이며, 모든 연산자 개발자가 반드시 익혀야 할 지식이다. GEMM의 경우 전통적인 부동소수점 Roofline Model은 이미 참고 의미가 없어졌고, Tensor Core 차원의 Roofline Model만 주목하면 된다.
 
-![](img/cutlass-notes-b32bee26/098.jpg)
+![](img/cute/cutlass-notes-b32bee26/098.jpg)
 
 Roofline Model의 세로축은 Tensor Core의 성능이며 단위는 OP/s이고, OP/cycle로 바꿔 표시할 수도 있다. 가로축은 계산 강도이며, 1 byte의 메모리 접근에 Tensor Core 계산량이 얼마나 대응하는지를 나타내고 단위는 OP/byte다.
 
@@ -3374,7 +3374,7 @@ GPU 안의 서로 다른 메모리 접근 유닛은 성능 병목이 다르므�
 
 유의할 점은 Tensor Core가 사용하는 명령어가 다르면 가로선의 높이도 달라진다는 것이다. Roofline Model 아래 표에서 HGMMA 명령어를 쓰면 SM90 Tensor Core의 이론 성능 상한(540672 OP/cycle = 132 SM x 4 Core/SM x 1024 OP/cycle/Core)에 도달할 수 있음을 볼 수 있다. 우리는 현재 HMMA 명령어를 쓰고 있으므로 이론 성능이 HGMMA의 2/3뿐이고, 실제 성능은 221272.10 OP/cycle로 이론 성능의 61.39%에 도달했다. 이것이 위에서 보고한 Compute Throughput 처리량 값이다.
 
-![](img/cutlass-notes-b32bee26/099.jpg)
+![](img/cute/cutlass-notes-b32bee26/099.jpg)
 
 ---
 
@@ -3384,7 +3384,7 @@ GPU 안의 서로 다른 메모리 접근 유닛은 성능 병목이 다르므�
 
 NVIDIA GPU의 각 SM 내부에는 하드웨어 Performance Monitor 카운터 묶음이 있어, 명령어 발행, cache 적중, warp 상태, pipe 점유 등 각종 이벤트를 추적하는 데 전용으로 쓰인다. PM Sampling은 kernel이 실행될 때 고정 cycle 주기로 PM 카운터를 읽어 시간에 따라 동적으로 변하는 지표를 얻는다.
 
-![](img/cutlass-notes-b32bee26/100.jpg)
+![](img/cute/cutlass-notes-b32bee26/100.jpg)
 
 SM Active Cycles에서 kernel의 꼬리 부분에 뚜렷한 하강 구간이 있는 것을 볼 수 있는데, 일부 SM이 모든 명령어 실행을 마치고 먼저 빠져나갔기 때문이다. 이것이 tail effect다. 그리고 Block Launched 행에서는 block이 언제 SM에 스케줄되었는지 볼 수 있다.
 
@@ -3396,7 +3396,7 @@ Compute 병목 문제에 관심이 있다면 Compute Workload Analysis 항목에
 
 아래 그림에서 왼쪽은 계산 유닛의 처리량/이용률, 즉 계산 유닛이 몇 cycle 동안 실제로 일했는지를 보여 준다. 오른쪽은 명령어 발행의 처리량, 즉 명령어 큐의 처리량/이용률을 보여 준다. Tensor Core 유닛의 경우 명령어 큐가 병목인 경우는 드물므로 주로 계산 처리량만 보면 된다.
 
-![](img/cutlass-notes-b32bee26/101.jpg)
+![](img/cute/cutlass-notes-b32bee26/101.jpg)
 
 GEMM 연산자의 경우 Compute가 문제의 병목이 되었을 때, Tensor Core 처리량이 이미 비교적 높고(내 실험 환경에서는 HMMA든 HGMMA든 실제 처리량 한계가 이론값의 99.5% 이상에 도달할 수 있었다) 알고리즘상 무효한 계산 부분이 매우 적다면, 이는 우리가 바라 마지않던 일이며 GEMM 연산자를 최적화한 최종적인 이상형이다. 이때는 Compute 문제를 해결할 필요도 없다. 결국 GEMM 자체가 compute-bound 쪽에 가깝기 때문이다.
 
@@ -3410,7 +3410,7 @@ Memory 병목과 Latency 병목은 보통 메모리 접근 명령어 및 메모�
 
 아래 그림은 SM 안팎 데이터 전송의 경로를 보여 준다.
 
-![](img/cutlass-notes-b32bee26/102.jpg)
+![](img/cute/cutlass-notes-b32bee26/102.jpg)
 
 명령어가 Warp Scheduler에 들어오면 일부 **고정 지연** 명령어는 직결된 pipe를 통해 보내진다(그림에는 표시하지 않았다). ALU, FMA, MMA 등이 그것이다. 반면 **긴 지연 / 불확정 지연** 명령어는 **MIO**(Memory Input/Output) 모듈로 보내져 처리된다. 모든 메모리 접근 명령어, XU 등 초월 함수 계산 명령어가 그것이다. 이 명령어들의 처리량이 1 inst/cycle보다 작아서, Warp Scheduler에 쌓이면 명령어 스케줄링 속도를 늦추기 때문이다.
 
@@ -3430,7 +3430,7 @@ LSU Pipe는 명령어를 L1TEX 모듈의 **LSUIN**으로 보내고, 여기서 �
 
 우리는 보통 아래 그림으로 LSU(LD/ST)를 이해하는데, 보기에 LSU는 SM 위의 한 유닛인 것처럼 보인다. 그러나 실제 상황은 이렇다. **LSU는 Warp Scheduler, MIO의 2단계 명령어 큐(LSU Pipe Queue + LSU Pipe), L1TEX(LSUIN, LSU Data)라는 세 계층을 가로지르는 파이프라인이며, 독립적인 모듈 하나로 단순하게 볼 수 없다**.
 
-![](img/cutlass-notes-b32bee26/103.jpg)
+![](img/cute/cutlass-notes-b32bee26/103.jpg)
 
 MIO는 문맥에 따라 MIO Pipe만을 특별히 가리킬 수도 있고 MIO 서브시스템 전체를 가리킬 수도 있다. 이 시리즈 노트에서는 명확한 설명이 없는 한 MIO는 그림의 초록 실선 틀 안에 있는 이 모듈들의 총칭이다.
 
@@ -3438,23 +3438,23 @@ MIO는 문맥에 따라 MIO Pipe만을 특별히 가리킬 수도 있고 MIO 서
 
 L1TEX와 LTS의 경우 그 내부의 cache 처리는 다시 **Tag Stage**(T-Stage), **Miss Stage**(M-Stage), **Data Stage**(D-Stage)로 나뉘며, 각각 cache tag를 조회해 적중 여부를 판단하는 단계, cache miss를 처리하는 단계, 데이터를 읽는 단계에 대응한다. 아래는 ncu 문서가 제공하는 L1TEX/LTS cache pipeline 흐름도다.
 
-![](img/cutlass-notes-b32bee26/104.jpg)
+![](img/cute/cutlass-notes-b32bee26/104.jpg)
 
-![](img/cutlass-notes-b32bee26/105.jpg)
+![](img/cute/cutlass-notes-b32bee26/105.jpg)
 
 ---
 
 이어서 ncu의 Memory Workload Analysis 항목을 살펴보자. 그중 Memory Tables는 앞선 노트에서 이미 상세히 분석했고, 나머지 부분도 이해하기 어렵지 않으므로 자세히 소개하지 않겠다. Memory Chart 부분은 각 유닛 간 메모리 접근 대역폭과 이용률을 보여 주며 비교적 명료하고 직관적이다. 그중 GPU가 듀얼 die인 경우 L1TEX와 LTS 사이에는 die를 가로지르는 메모리 접근을 처리하고 병합하는 데 쓰이는 **LRC**(L2 Cache Request Coalescer)가 하나 더 놓인다.
 
-![](img/cutlass-notes-b32bee26/106.jpg)
+![](img/cute/cutlass-notes-b32bee26/106.jpg)
 
 더 세밀한 메모리 접근 데이터를 얻고 싶다면, 예를 들어 아래 그림의 각 경로의 처리량 상황을 알고 싶다면 어떤 지표에 주목해야 할까?
 
-![](img/cutlass-notes-b32bee26/107.jpg)
+![](img/cute/cutlass-notes-b32bee26/107.jpg)
 
 사실 ncu는 이 항목에서 세 가지 지표를 더 제공한다. 각각 **유닛 내 트랜잭션 처리량**(Mem Busy), **유닛 간 대역폭 처리량**(Max Bandwidth), **SM 명령어 처리량**(Mem Pipes Busy)을 뜻한다. 이 지표들에 딸린 하위 지표에 주목하면 성능 핫스팟을 매우 세밀하게 볼 수 있다.
 
-![](img/cutlass-notes-b32bee26/108.jpg)
+![](img/cute/cutlass-notes-b32bee26/108.jpg)
 
 독자는 아래 나열된 지표를 데이터 경로 그림의 올바른 부분에 대응시켜 볼 수 있는지 시도해 보라. 이를 통해 데이터 전송의 전체 경로를 더 잘 이해할 수 있다.
 
@@ -3503,7 +3503,7 @@ L1TEX와 LTS의 경우 그 내부의 cache 처리는 다시 **Tag Stage**(T-Stag
 
 Latency-bound는 주로 두 가지로 나타난다. 하나는 warp 수가 부족해 동시 실행되는 명령어 수가 부족한 것이고, 다른 하나는 warp가 어떤 이유로 stall 되어 명령어를 계속 issue 할 수 없는 것이다. Scheduler Statistics 항목에서 warp의 스케줄링 상황을 볼 수 있다.
 
-![](img/cutlass-notes-b32bee26/109.jpg)
+![](img/cute/cutlass-notes-b32bee26/109.jpg)
 
 이것은 깔때기 모델이며, 자세히 분석해 보자.
 
@@ -3517,7 +3517,7 @@ Latency-bound는 주로 두 가지로 나타난다. 하나는 warp 수가 부족
 
 Warp State Statistics 항목에서 warp stall의 원인에 어떤 것이 있는지 찾을 수 있다.
 
-![](img/cutlass-notes-b32bee26/110.jpg)
+![](img/cute/cutlass-notes-b32bee26/110.jpg)
 
 우리는 주로 위 그림에서 stall의 **주된 원인**에 주목하는데, 여기서는 **Long Scoreboard**다. 서로 다른 주된 원인과 서로 다른 stall 정도에 따라 그에 상응하는 연산자 최적화 전략을 세우게 된다.
 
@@ -3538,11 +3538,11 @@ Warp State Statistics 항목에서 warp stall의 원인에 어떤 것이 있는�
 
 유의할 점은 **barrier라는 명령어에 stall이 나타났다고 보고되는 것의 의미는 warp scheduler가 이 명령어에서 막혀 발행하지 못한다는 뜻, 즉 앞의 명령어(즉 `cute.arch.cp_async_wait_group(0)`)가 아직 실행을 마치지 못했기 때문이라는 것이지, barrier의 해제를 기다리느라 stall이 나타났다는 뜻이 아니라는 것이다.**barrier 아래 한 줄의 명령어의 7.61% 가 barrier 해제를 기다리는 stall의 비율을 나타낸다.
 
-![](img/cutlass-notes-b32bee26/111.jpg)
+![](img/cute/cutlass-notes-b32bee26/111.jpg)
 
 거시적 차원에서 볼 때 우리는 언제 warp stall 문제를 중점적으로 해결해야 할까? 고도로 최적화된 연산자에서 warp stall, 특히 Stall Wait가 나타나는 것은 매우 정상적인 일이다. 한 가지 예로, MMA 명령어를 무한 루프로 도는 연산자를 ncu로 profile 하면 이때 Tensor Core 이용률이 100%에 가깝고 warp stall 상황은 다음과 같다.
 
-![](img/cutlass-notes-b32bee26/112.jpg)
+![](img/cute/cutlass-notes-b32bee26/112.jpg)
 
 warp가 대부분의 시간 동안 앞선 MMA 명령어의 데이터 계산 완료를 기다리고 있음을 볼 수 있다. 따라서 성능이 기준에 도달하기만 한다면 warp stall을 없애려고 애쓸 필요는 없다. 일반적으로 계산과 메모리 접근 경로에서 뚜렷한 걸림돌을 찾지 못했는데도 처리량이 모두 비교적 낮은 상황이라면 warp stall 문제에 각별히 유의해야 한다.
 
@@ -3558,7 +3558,7 @@ warp가 대부분의 시간 동안 앞선 MMA 명령어의 데이터 계산 완�
 
 SMEM -> RF 복사 지연과 MMA의 계산 시간 사이에도 overlap의 기회가 있으므로, 비슷한 파이프라인 스케줄 순서를 설계하여 원래보다 몇 배의 레지스터 수를 소비하는 대신 복사와 계산을 병렬 실행하게 할 수 있다.
 
-![](img/cutlass-notes-b32bee26/113.jpg)
+![](img/cute/cutlass-notes-b32bee26/113.jpg)
 
 **Pipelining을 쓰는 데에는 뚜렷한 대가가 있다.** stage 수가 많을수록 추가로 할당해야 할 SMEM 자원과 레지스터 자원이 많아져 잠재적인 Occupancy 최적화 기회를 떨어뜨린다. 또한 stage가 많으면 데이터 블록이 더 잘게 쪼개지므로 우리의 Block MMA와 Tile MMA 규모를 줄일 수밖에 없게 되어 데이터 재사용률이 낮아진다. 따라서 stage 단계 수는 여러 요소를 종합적으로 고려해야 확정할 수 있다.
 

@@ -70,7 +70,7 @@ def forward(self, L_y_ : torch.Tensor):
     return (loss,)
 ```
 
-![TorchDynamo 작업 흐름도](images/v2-4a453c11c8f34c668f921ee832bc5d9c_1440w.jpg)
+![TorchDynamo 작업 흐름도](images/B72_torch_compile_torchdynamo/v2-4a453c11c8f34c668f921ee832bc5d9c_1440w.jpg)
 
 **장점:**
 - **동적 최적화**: 루프와 조건문을 포함하는 동적 제어 흐름이 있는 모델을 처리할 수 있어 동적 계산 그래프에 적합합니다.
@@ -81,7 +81,7 @@ def forward(self, L_y_ : torch.Tensor):
 - **신생 도구**: 비교적 새로운 최적화 도구로서, 일부 극단적인 시나리오에서는 아직 안정적이지 않거나 모든 PyTorch 기능을 완전히 지원하지 못할 수 있으며, 직렬화/역직렬화 API가 아직 제공되지 않습니다.
 - **백엔드 의존**: 최종 성능 향상은 사용하는 백엔드 옵티마이저에 의존하며, 특정 백엔드는 특정 하드웨어나 모델에서 성능이 좋지 않을 수 있습니다. 다른 정적 그래프 구축 방식과 비교하면 TorchDynamo는 더 유연하고 복잡한 연산을 더 많이 지원하며, 사용자가 대량의 코드 수정을 할 필요가 없습니다.
 
-![정적 그래프 구축 방식 비교](images/v2-7fcc9dbcbd5973419b73ac82e42bc0ce_1440w.jpg)
+![정적 그래프 구축 방식 비교](images/B72_torch_compile_torchdynamo/v2-7fcc9dbcbd5973419b73ac82e42bc0ce_1440w.jpg)
 
 ## CPython 코드의 실행 과정 & PEP 523
 
@@ -156,7 +156,7 @@ static PyObject* _custom_eval_frame(
 
 > **후속 TorchDynamo의 코드 로직은 다음과 같습니다. 관심 있는 분은 뒤의 코드 해석 부분도 참고해 주세요.**
 
-![TorchDynamo 코드 흐름도](images/v2-c4a0940c903c03b1033bc953e7287016_1440w.jpg)
+![TorchDynamo 코드 흐름도](images/B72_torch_compile_torchdynamo/v2-c4a0940c903c03b1033bc953e7287016_1440w.jpg)
 
 ## TorchDynamo 시뮬레이션 실행 & FX Graph 구축
 

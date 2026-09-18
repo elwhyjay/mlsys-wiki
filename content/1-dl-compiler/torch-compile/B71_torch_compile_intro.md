@@ -28,7 +28,7 @@
 
 이상 4개 컴포넌트는 모두 Python으로 작성되었으며, 동적 shape(즉, 재컴파일 없이 다른 크기의 텐서를 전송 가능)을 지원하여 유연한 구현과 개발자 및 벤더의 개발 문턱을 낮추는 효과를 실현합니다.
 
-![](images/v2-ae200c0fe7a5679938f17f9a587bc9a0_1440w.jpg)
+![](images/B71_torch_compile_intro/v2-ae200c0fe7a5679938f17f9a587bc9a0_1440w.jpg)
 
 ### torch.compile 사용법
 

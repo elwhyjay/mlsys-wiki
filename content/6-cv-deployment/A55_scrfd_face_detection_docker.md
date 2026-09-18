@@ -4,11 +4,11 @@
 
 ## 0. 서문
 
-![](images/v2-6bf3a03cdeff629e280ffc74f03a7640_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-6bf3a03cdeff629e280ffc74f03a7640_1440w.jpg)
 
 얼마 전 SCRFD, 즉 이전 강자인 RetinaFace를 크게 앞선 모델의 변환에 관한 글을 썼다. C++ engineering 부분은 아직 보충하지 않았으므로 이 글의 목적 중 하나는 그 빈칸을 채우는 것이다.
 
-![](images/img_001.png)
+![](images/A55_scrfd_face_detection_docker/img_001.png)
 
 당시에는 다음 repository의 ONNX file을 사용해 NCNN, MNN, TNN model로 변환했고, 몇 가지 op conversion 문제를 만났다. 그래서 어쩔 수 없이 이전 글에 쓴 우회 trick을 사용했다.
 
@@ -63,7 +63,7 @@ cp onnx/* share/
 
 Lite.AI.ToolKit C++ 도구 상자로 SCRFD 예제를 실행한다. ONNXRuntime C++, MNN, TNN, NCNN version을 포함한다.
 
-![](images/v2-017d0c63afcf8f28e91a082adf56704d_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-017d0c63afcf8f28e91a082adf56704d_1440w.jpg)
 
 Star는 필요하면 누르면 된다.
 
@@ -92,25 +92,25 @@ ONNXRuntime C++, MNN, TNN, NCNN version의 추론 구현은 모두 테스트를 
 
 제공한 링크에서 내려받을 수 있다. Baidu Drive code는 `8gin`이다. 또는 이 repository에서 직접 내려받을 수도 있다.
 
-![](images/v2-fda09f9b520f926ef779748559709ae4_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-fda09f9b520f926ef779748559709ae4_1440w.jpg)
 
 ### 4.2 MNN 모델 파일
 
 MNN 모델 파일 다운로드 주소다. Baidu Drive code는 `9v63`이다. 또는 이 repository에서 직접 내려받을 수도 있다.
 
-![](images/v2-9d57ff2ef215035f931fbb7f2055e095_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-9d57ff2ef215035f931fbb7f2055e095_1440w.jpg)
 
 ### 4.3 TNN 모델 파일
 
 TNN 모델 파일 다운로드 주소다. Baidu Drive code는 `6o6k`이다. 또는 이 repository에서 직접 내려받을 수도 있다.
 
-![](images/v2-d408cd0ef55c1488025509bf86db203d_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-d408cd0ef55c1488025509bf86db203d_1440w.jpg)
 
 ### 4.4 NCNN 모델 파일
 
 NCNN 모델 파일 다운로드 주소다. Baidu Drive code는 `sc7f`이다. 또는 이 repository에서 직접 내려받을 수도 있다.
 
-![](images/v2-1a0d6e2b5b3521df6536f652bcf704ec_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-1a0d6e2b5b3521df6536f652bcf704ec_1440w.jpg)
 
 ## 5. Interface 문서
 
@@ -275,7 +275,7 @@ static void test_ncnn()
 
 출력 결과는 다음과 같다.
 
-![](images/v2-017d0c63afcf8f28e91a082adf56704d_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-017d0c63afcf8f28e91a082adf56704d_1440w.jpg)
 
 ## 7. 빌드 및 실행
 
@@ -455,6 +455,6 @@ TNN Version Done! Detected Face Num: 7
 Testing Successful !
 ```
 
-![](images/v2-c3d43b9fed20a75c66558806e3d0a8dc_1440w.jpg)
+![](images/A55_scrfd_face_detection_docker/v2-c3d43b9fed20a75c66558806e3d0a8dc_1440w.jpg)
 
 효과는 괜찮아 보인다. 더 많은 모델의 C++ engineering 사례를 알고 싶으면 팔로우하면 된다.

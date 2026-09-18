@@ -14,7 +14,7 @@ torch.compile()에서 Dynamo는 프런트엔드로서 계산 그래프 캡처를
 
 ## 2. TorchInductor 연산자 융합 로직
 
-![연산자 융합 로직](images/img_001.jpg)
+![연산자 융합 로직](images/B75_torch_compile_op_fusion/img_001.jpg)
 
 TorchInductor에서 연산자 융합을 담당하는 주요 세 가지 유형이 있습니다:
 - **FX Graph 상의 연산자 융합**: FX IR의 target이 아직 torch.ops 레벨일 수 있어 비교적 조대한 입도의 융합에 해당합니다. 보통 추론 시나리오에서 적용되며, 예를 들어 추론에서는 Conv+BN 연산자 융합을 수행하지만, 훈련 시나리오에서는 가중치 업데이트 문제로 적용되지 않습니다.
@@ -310,7 +310,7 @@ output=(TensorBox(StorageBox(
 - **순수 계산 pointwise 노드, `inner_fn`을 재사용할 수 있는 노드는 fused됩니다(예: PointWise와 PointWise 간, Reduction의 입력인 PointWise 간). 이런 중간 결과는 메모리에 저장하지 않고 직접 재사용하여 후속 계산을 진행합니다.**
 - **`sum()` 함수처럼 reduce를 호출하여 `inner_fn`을 직접 재사용할 수 없는 경우 ComputedBuffer로 저장합니다(하나의 IR buffer에 대응). 또한 output에 사용되는 Node도 직접 ComputedBuffer로 저장됩니다.**
 
-![inline 융합 과정](images/v2-3493c81d0dd0f2012554fe153ec79d96_1440w.jpg)
+![inline 융합 과정](images/B75_torch_compile_op_fusion/v2-3493c81d0dd0f2012554fe153ec79d96_1440w.jpg)
 
 ### 2.3. Inductor IR 상의 연산자 융합
 
@@ -349,7 +349,7 @@ def forward(self, primals_1, primals_3, primals_8, convolution, squeeze_1, le, u
 
 Inductor IR 상 연산자 융합의 핵심 함수는 `fuse_node()`이며, 전체 작업 흐름은 다음과 같습니다:
 
-![fuse_node 작업 흐름](images/v2-82f0a04e9155b4966bf0cc39def8e02b_1440w.jpg)
+![fuse_node 작업 흐름](images/B75_torch_compile_op_fusion/v2-82f0a04e9155b4966bf0cc39def8e02b_1440w.jpg)
 
 `fuse_nodes()` 함수에서는 비교적 단순하게 직접 10회 루프를 돌며 `fuse_nodes_once()` 함수를 호출하여 연산자 융합을 수행합니다. 융합 전후 `Scheduler.nodes` 길이가 변하지 않거나 하나만 남으면 조기에 루프를 종료합니다. `fuse_nodes_once()`에서 핵심적인 두 함수는 `can_fuse`(두 node의 융합이 규칙을 충족하는지 판단)와 `score_fusion`(모든 융합 가능한 노드 쌍에 점수를 매기며, 두 노드 쌍의 융합이 충돌하면 점수가 높은 것을 우선 융합)입니다. `fuse_nodes_once()`의 전체 흐름은 다음과 같습니다:
 
@@ -375,7 +375,7 @@ Inductor IR 상 연산자 융합의 핵심 함수는 `fuse_node()`이며, 전체
 
 `can_fuse()` 함수는 두 노드의 융합이 정해진 규칙을 충족하는지 판단하며, 주요 규칙은 다음과 같습니다:
 
-![can_fuse 규칙](images/v2-070670959d3b0bf6719281521df934b3_1440w.jpg)
+![can_fuse 규칙](images/B75_torch_compile_op_fusion/v2-070670959d3b0bf6719281521df934b3_1440w.jpg)
 
 전체적으로, 왼쪽의 많은 판단은 비교적 기본적인 제약 판단이며, 최종적으로 `can_fuse_vertical()`/`can_fuse_horizontal()` 두 함수로 수직/수평 융합 가능 여부를 판단하여 최종 융합 가능 여부를 결정합니다. 핵심 함수 구현:
 

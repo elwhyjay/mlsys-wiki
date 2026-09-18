@@ -18,13 +18,13 @@
 
 다음은 개요 이미지입니다.
 
-![이미지](images/img_01.png)자동 schedule 검색에서 얻은 최적의 결과를 기준으로, 검색에는 20분이 소요되었습니다.
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_01.png)자동 schedule 검색에서 얻은 최적의 결과를 기준으로, 검색에는 20분이 소요되었습니다.
 
 # 0x1. 본 글에 필요한 하드웨어 환경 및 본 글에서 수행해야 할 작업.
 
 본 글의 실험 및 테스트 데이터는 동일한 하드웨어 환경과 우분투 운영체제에서 수행되었습니다. 다음 그림은 해당 기기의 하드웨어 구성 정보를 보여줍니다.
 
-![이미지](images/img_02.png)기기 구성 정보
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_02.png)기기 구성 정보
 
 참고로 이 CPU는 64개의 코어를 가지고 있으며, 최대 및 최소 클럭 속도는 각각 3900MHz와 1000MHz이고, L1d, L2, L3 cache 크기는 각각 32K, 1024K, 22528K입니다.
 
@@ -106,7 +106,7 @@ GFLOPs와 CPU 코어 수 사이에는 정비례 관계가 있음을 쉽게 알 �
 
 GFLOPs(1 GFLOPs = 10^9 FLOPs)와 GFLOPS 개념은 이미 소개되었습니다. 여기서는 연산 밀도와 RoofLine 모델을 간략하게 소개하겠습니다. 연산 밀도는 단위 메모리 접근당 필요한 연산량을 나타내며, 단위는 FLOPs/Byte입니다. 본 글의 과제에서 FLOPs, 즉 부동 소수점 연산 횟수는 다음과 같습니다... 여기서 바이트는 메모리 접근 횟수를 나타냅니다. 이 예시에서 메모리 접근 횟수는 다음과 같습니다... 따라서 여기서 계산된 밀도는 다음과 같습니다. RoofLine 모델은 하드웨어에서 프로그램 성능의 상한을 평가하는 데 사용되는 모델이며, 다음 다이어그램으로 나타낼 수 있습니다.
 
-![이미지](images/img_03.png)RoofLine 모델에서 파생된 RoofLine 모델.
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_03.png)RoofLine 모델에서 파생된 RoofLine 모델.
 
 여기서 우리가 계산한 연산 밀도 183.5 FLOPs/Bytes가 단일 코어의 `fma fp32 perf: 73.3017 GFLOPS` 보다 훨씬 크다는 점에 주목하세요. 따라서 분명히 우리의 operator는 연산 집약형 operator이며, 그렇다면 연산 속도의 상한은 피크 연산 속도이며 대역폭에 의해 제약을 받지 않습니다. 그러므로 우리는 안심하고 다음 설명으로 넘어갈 수 있습니다.
 
@@ -442,7 +442,7 @@ GFLOPS가 3-4배 향상된 것을 볼 수 있는데, 그렇다면 여기서 핵�
 
 다음 그림은 Array Packing의 일반적인 원리에 대한 설명입니다.
 
-![이미지](images/img_04.png)Array Packing의 일반적인 원리 설명
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_04.png)Array Packing의 일반적인 원리 설명
 
 B가 평탄화된 후, 우리가 k 차원에서 반복할 때 B 배열의 접근이 연속적이지 않다는 것을 관찰할 수 있습니다. 우리는 B(차원이 )에 대해 재배치를 적용해서 차원을 갖도록 할 수 있는데, 여기서 bn은 분할 인자이며 inner 루프에서 B의 vector 크기이기도 합니다. 이 재배치는 N을 두 차원 — 과 — 으로 나누고, 새로운 차원 은 B가 outer 루프에서 inner 루프로 가는 인덱스 (no, ko, ki, ni)와 일치합니다. 그래서 B가 평탄화 재배치된 후 메모리 접근은 연속적입니다.
 
@@ -567,7 +567,7 @@ Array Packing Schedule을 추가한 새로운 TIR은 다음과 같습니다.
 
 다음으로 우리가 현재 사용한 최적화들을 보여주는 그림을 그려보고, 이 최적화들을 사용한 후 실측한 부동 소수점 피크 대비 어느 수준에 도달했는지 보여드리겠습니다.
 
-![이미지](images/img_05.png)현재 사용된 최적화와 부동 소수점 피크의 비교
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_05.png)현재 사용된 최적화와 부동 소수점 피크의 비교
 
 위 차트의 B, V, R, A, W는 각각 Blocking, Vectorize, Reorder, Array Packing 그리고 Write Cache의 약자입니다. 이러한 Schedule 최적화에 기반하여, 우리의 성능이 부동 소수점 피크의 약 58.5%까지 올라올 수 있음을 볼 수 있습니다.
 
@@ -591,7 +591,7 @@ Auto-Scheduling을 사용하여 Schedule을 검색하면 우리가 search space�
 
 이전 최적화와 비교해 본 결과는 다음 그림과 같습니다.
 
-![이미지](images/img_06.png)Ansor 기반으로 얻은 최고의 결과, 검색 시간 20분
+![이미지](images/tvm_3gen_optimize_x86_matmul/img_06.png)Ansor 기반으로 얻은 최고의 결과, 검색 시간 20분
 
 현재 Ansor 기반의 최고 결과는 부동 소수점 피크의 85.5%에 도달했으며, 상당히 좋은 결과로 느껴집니다. 기본 Schedule의 Naive 프로그램 성능 대비 91배 향상되었습니다.
 

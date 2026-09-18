@@ -63,19 +63,19 @@ DNN 성능의 중요성에 비추어, 연구자와 업계 종사자들은 search
 
 다양한 하드웨어 플랫폼에 이러한 operator를 배포할 때 좋은 성능을 유지하기 위해, 여러 컴파일러 기술(예: TVM[11], Halide[41], Tensor Comprehensions[49])이 도입되었습니다. 사용자는 high-level 선언적 언어로 수학식과 유사한 형태의 계산을 정의하고, 컴파일러는 정의에 따라 최적화된 tensor 프로그램을 생성합니다. Figure 1은 TVM tensor 표현 언어에서의 matmul 정의를 보여줍니다. 사용자는 주로 tensor의 shape와 출력 tensor의 각 원소를 어떻게 계산할지를 정의하면 됩니다.
 
-![이미지](images/img_01.png)Figure1
+![이미지](images/ansor_paper_reading/img_01.png)Figure1
 
 그러나 high-level 정의로부터 고성능 tensor 프로그램을 자동으로 생성하는 것은 매우 어렵습니다. 타겟 플랫폼의 아키텍처에 따라, 컴파일러는 다양한 최적화 방식(예: tile, vectorize, parallel 등)을 포함하는 매우 복잡하고 거대한 space에서 search해야 합니다. 고성능 프로그램을 찾으려면 search 전략이 포괄적인 space를 다루고 효율적으로 search해야 합니다. 본 절에서는 가장 최신이며 효과적인 두 가지 방법을 설명하고, 8장에서 다른 관련 연구를 다룹니다.
 
 **Template-guided search** 템플릿 기반 search에서 search space는 수작업 템플릿으로 지정됩니다. Figure 2 a에서 보이듯, 컴파일러(예: TVM)는 사용자가 계산 정의에 사용할 템플릿을 직접 작성하도록 요구합니다. 이 템플릿은 일부 조정 가능한 매개변수(예: tile size, unrolling factor)로 tensor 프로그램의 구조를 정의합니다. 그런 다음 컴파일러는 특정 입력 shape 설정과 특정 하드웨어 타겟에 대해 이러한 매개변수의 최적값을 search합니다. 이 방식은 일반적인 딥러닝 operator에서 좋은 성능을 보였습니다. 그러나 템플릿 개발에는 막대한 엔지니어링 노력이 필요합니다. 예를 들어, TVM 코드베이스에서 수작업 템플릿이 차지하는 코드는 이미 15000줄을 넘습니다. 새로운 operator와 새로운 하드웨어 플랫폼이 등장하면서 이 숫자는 계속 늘어나고 있습니다. 또한 고품질 템플릿 개발에는 tensor operator와 하드웨어에 대한 전문 지식이 필요합니다. 고품질 템플릿 개발에도 많은 연구 노력이 필요합니다 [32, 55, 59]. 템플릿 설계가 복잡함에도 불구하고, 수동으로 지정한 템플릿은 모든 operator의 모든 최적화 선택을 일일이 열거하는 것이 어렵기 때문에 제한된 프로그램 구조만 다룰 수 있습니다. 이 방식은 보통 각 operator마다 템플릿 하나를 정의해야 합니다. Flex-Tensor [59]는 여러 operator를 다루는 범용 템플릿을 제안했지만, 그 템플릿은 여전히 단일 operator용이며 여러 operator가 관여하는 최적화(예: operator fusion)는 포함하지 않습니다. 여러 operator가 있는 계산 그래프를 최적화하는 search space는 이러한 operator들의 다양한 조합 방식을 포함해야 합니다. 템플릿 기반 방법은 search 과정에서 고정된 템플릿을 분해하고 재조합할 수 없기 때문에 이를 달성할 수 없습니다.
 
-![이미지](images/img_02.png)Figure 2
+![이미지](images/ansor_paper_reading/img_02.png)Figure 2
 
 **Sequential construction based search.** 이 방법은 프로그램 구성을 고정된 결정 시퀀스로 분해하여 search space를 정의합니다. 그런 다음 컴파일러는 beam search [34] 같은 알고리즘을 사용해 좋은 결정을 search합니다(예: Halide auto-scheduler [2]). 이 방식에서 컴파일러는 계산 그래프의 모든 노드를 순차적으로 unfold해 tensor 프로그램을 구성합니다. 각 노드에 대해, 컴파일러는 이를 어떻게 low-level tensor 프로그램으로 변환할지에 대한 일련의 결정을 내립니다(즉, computation location, storage location, tile size 등). 모든 노드가 unfold되면 완성된 tensor 프로그램이 구축됩니다. 이 방식은 각 노드에 대해 일반적인 unfold 규칙 집합을 사용하므로, 수작업 템플릿 없이 자동으로 search할 수 있습니다. 각 결정의 가능한 선택지가 매우 많기 때문에 sequential 과정이 가능하도록 하기 위해, 이 방법은 각 결정 후 상위 k개의 후보 프로그램만 유지합니다. 컴파일러는 학습 가능한 cost model을 기반으로 후보 프로그램의 성능을 평가·비교해 상위 k개를 선택하고 나머지는 버립니다. search 과정에서 후보 프로그램은 불완전한데, 이는 계산 그래프의 일부만 펼쳐졌거나 일부 결정만 내려졌기 때문입니다. Figure 2 b가 이 과정을 보여줍니다.
 
 그러나 불완전한 프로그램의 최종 성능을 평가하는 데에는 몇 가지 어려움이 있습니다: (1) 완성된 프로그램으로 학습된 cost model은 불완전한 프로그램의 최종 성능을 정확히 예측할 수 없습니다. cost model은 완성된 프로그램으로만 학습할 수 있는데, 학습 라벨을 얻기 위해서는 프로그램을 컴파일하고 실행 시간을 측정해야 하기 때문입니다. 이 모델을 직접 사용해 불완전한 프로그램의 최종 성능을 평가하면 정확도가 떨어집니다. 사례 연구로(5.2절), 우리는 search space에서 무작위로 추출한 20,000개의 완성된 프로그램에 대해 cost model을 학습시킨 뒤, 이 모델로 불완전한 프로그램의 최종 성능을 예측했습니다. 불완전한 프로그램은 완성된 프로그램의 일부 루프 변환만 적용해 얻습니다. 우리는 두 가지 평가 지표로 평가합니다: 짝지어진 비교 정확도와 top-k 프로그램의 recall 점수(k=10). Figure 3에서 보이듯, 두 곡선은 각각 50%와 0%에서 시작하는데, 이는 무정보의 무작위 추측이 50%의 짝지어진 비교 정확도와 0%의 top-k recall을 제공한다는 의미입니다. 두 곡선은 프로그램이 완성에 가까워질수록 빠르게 상승하며, 이는 cost model이 완성된 프로그램의 성능에 대해서는 매우 좋지만, 불완전한 프로그램의 최종 성능은 정확히 예측하지 못한다는 것을 의미합니다. (2) 순차적 결정의 고정된 순서는 search space 설계를 제한합니다. 예를 들어, 일부 최적화는 계산 그래프에 새로운 노드를 추가해야 합니다(예: 캐시 노드 추가, rfactor[46] 사용). 서로 다른 프로그램의 결정 수가 다를 수 있어, 불완전한 프로그램들을 공정하게 비교하기 위해 정렬하기 어렵습니다. (3) sequential 구성 기반 search는 확장성이 없습니다. search space를 확장하려면 더 많은 sequential 구성 단계를 추가해야 하지만, 이는 누적 오류를 더 심각하게 만듭니다.
 
-![이미지](images/img_03.png)Figure3
+![이미지](images/ansor_paper_reading/img_03.png)Figure3
 
 **Ansor's hierarchical approach** Figure 2-c에서 보이듯, Ansor는 high-level 구조와 low-level 세부 사항을 분리하는 계층적 search space에 기반해 구축됩니다. Ansor는 계산 그래프의 search space를 자동으로 구축하므로 수작업으로 템플릿을 개발할 필요가 없습니다. 그런 다음 Ansor는 space에서 완성된 프로그램을 샘플링하고 완성된 프로그램에 대해 미세 조정을 수행하여, 불완전한 프로그램에 대한 부정확한 추정을 피합니다. Figure 2는 Ansor 방법과 기존 방법 간의 주요 차이점을 보여줍니다.
 
@@ -89,7 +89,7 @@ Ansor는 자동 tensor 프로그램 생성 프레임워크입니다. Figure 4는
 
 **Task scheduler.** program sampler와 performance tuner를 사용하면 Ansor는 계산 그래프에 대한 고성능 tensor 프로그램을 찾을 수 있습니다. 직관적으로, 전체 DNN을 단일 계산 그래프로 보고 그에 대한 완성된 tensor 프로그램을 생성하면 최고의 성능을 달성할 수 있습니다. 그러나 이는 search space의 불필요한 지수적 폭발을 처리해야 하므로 비효율적입니다. 일반적으로 컴파일러는 DNN의 큰 계산 그래프를 몇 개의 작은 서브그래프로 분할합니다 [11, 42]. DNN의 layer 단위 구성 특성으로 인해, 이 분할이 성능에 미치는 영향은 무시할 수 있을 정도입니다. 이는 Ansor의 마지막 과제로 이어집니다: 여러 서브그래프에 대해 프로그램을 생성할 때 어떻게 시간 자원을 분배할 것인가. Ansor의 task scheduler(6장)는 gradient descent 기반 schedule 알고리즘을 사용해, end-to-end DNN 성능을 향상시킬 가능성이 더 높은 서브그래프에 자원을 할당합니다.
 
-![이미지](images/img_04.png)Figure 4
+![이미지](images/ansor_paper_reading/img_04.png)Figure 4
 
 # 4. 프로그램 샘플러
 
@@ -109,11 +109,11 @@ Figure 4에서 보이듯, program sampler는 서브그래프를 입력으로 받
 
 우리는 몇 가지 기본 규칙을 재귀적으로 적용해 가능한 모든 sketch를 생성하는 추론 기반 열거 방법을 제안합니다. 이 방법은 DAG를 입력으로 받아 sketch 목록을 반환합니다. 우리는 상태를 정의하는데, 여기서 S는 DAG의 일부에 대해 현재 생성된 sketch이고, i는 현재 작업 중인 노드의 인덱스입니다. DAG의 노드는 출력에서 입력으로 위상 순서로 정렬됩니다. 추론은 초기 naive 프로그램과 마지막 노드에서 시작하며, 다시 말해 초기 상태는 (naive 프로그램, 마지막 노드의 인덱스)로 작성될 수 있습니다. 그런 다음 모든 추론 규칙을 재귀적으로 상태에 적용해 봅니다. 각 규칙에 대해, 현재 상태가 적용 조건을 만족하면 규칙을 적용해 다음을 얻습니다. 이렇게 작업 노드의 인덱스 i가 단조 감소하며, i가 0이 되면 종료 상태가 됩니다. 열거 과정에서 한 상태에 여러 규칙을 적용해 여러 후속 상태를 생성할 수 있습니다. 한 규칙도 여러 가능한 후속 상태를 생성할 수 있으므로, 우리는 모든 중간 상태를 저장하는 큐를 유지합니다. 큐가 비면 과정이 종료됩니다. sketch 생성이 끝나면 종료 상태에 있는 모든 것이 생성된 sketch 목록입니다. 일반적으로 한 서브그래프가 생성하는 sketch 수는 10개 미만입니다.
 
-![이미지](images/img_05.png)Figure 5
+![이미지](images/ansor_paper_reading/img_05.png)Figure 5
 
 **Derivation rules.** Table 1은 우리가 CPU에 사용한 추론 규칙들을 나열합니다. 먼저 몇 가지 술어를 선언합니다. 예를 들어 **IsStrictInliable(S, i)** 는 서브그래프 S 내 노드 i가 element-wise OP인지(예: ReLU와 같이 inline 최적화될 수 있는 OP, 논문에서는 inlined라고 표현)를 나타냅니다. **HasDataReuse(S, i)** 는 S 내 노드 i가 계산 집약적 operator이며 operator 내 데이터 재사용 기회가 많은지(예: 컨볼루션, 행렬 곱)를 나타냅니다. **HasFusibleConsumer(S, i)** 는 S 내 노드 i에 단 하나의 소비자 j가 있고 j가 노드 i와 fusion될 수 있는지(예: matmul+bias_add, conv2d+relu)를 나타냅니다. **HasMoreReductionParallel(S, i)** 는 S 내 노드 i가 공간 차원에서는 거의 병렬화할 수 없지만 reduction 차원에서는 충분한 병렬화 기회가 있는지(예: 2D matmul 계산)를 나타냅니다. 우리는 계산 정의에 대한 정적 분석을 수행해 이 술어들의 값을 얻습니다. 분석은 수학식의 read/write 패턴을 파싱하여 자동으로 완료됩니다. 다음으로 각 추론 규칙의 기능을 소개합니다.
 
-![이미지](images/img_06.png)Tabel1
+![이미지](images/ansor_paper_reading/img_06.png)Tabel1
 
 규칙 1은 노드가 엄격하게 inline될 수 없는 경우 단순히 건너뛰는 것입니다. 규칙 2는 엄격하게 inline될 수 있는 노드에 대해 항상 inline 작업을 수행합니다. 규칙 1과 규칙 2의 조건은 상호 배타적이므로, i>1인 상태는 항상 둘 중 하나를 만족하며 추론을 계속할 수 있습니다.
 
@@ -125,15 +125,15 @@ Figure 4에서 보이듯, program sampler는 서브그래프를 입력으로 받
 
 **Examples** Figure 5는 sketch를 생성하는 세 가지 예시를 보여줍니다. sketch는 TVM의 수작업 템플릿과 다릅니다. 수작업 템플릿은 high-level 구조와 low-level 세부 사항을 모두 지정하지만, sketch는 high-level 구조만 정의하기 때문입니다. Example Input 1의 경우, DAG 내 네 노드의 정렬 순서는 (A,B,C,D)입니다. DAG의 sketch를 추론하기 위해, 우리는 출력 노드 D(i=4)에서 시작해 노드에 규칙을 하나씩 적용합니다. 구체적으로, 생성된 sketch 1의 추론 규칙은 다음과 같습니다:
 
-![이미지](images/img_07.png)여기에 이미지 삽입
+![이미지](images/ansor_paper_reading/img_07.png)여기에 이미지 삽입
 
 Example Input 2의 경우, 다섯 노드의 정렬 순서는 (A,B,C,D,E)입니다. 마찬가지로 출력 노드 E(i=5)에서 시작해 재귀적으로 규칙을 적용합니다. 생성된 sketch 2는 다음과 같습니다:
 
-![이미지](images/img_08.png)여기에 이미지 삽입
+![이미지](images/ansor_paper_reading/img_08.png)여기에 이미지 삽입
 
 마찬가지로, sketch 3은 다음 규칙들의 순차 적용으로 생성됩니다:
 
-![이미지](images/img_09.png)여기에 이미지 삽입
+![이미지](images/ansor_paper_reading/img_09.png)여기에 이미지 삽입
 
 **Customization** 제안된 규칙들이 충분히 실용적이어서 대부분의 operator 구조를 다룰 수 있지만, 항상 예외는 있습니다. 예를 들어 일부 특수한 알고리즘(예: Winograd 컨볼루션[30])과 가속기 내부 함수(예: TensorCore[37])는 효과를 보려면 특수한 tiling 구조가 필요합니다. 템플릿 추론 search 방법(TVM)은 새로운 사례마다 새로운 템플릿을 만들 수 있지만, 이는 많은 설계 작업을 요구합니다. 반면 Ansor의 추론 기반 sketch 생성은 충분히 유연해 새로운 알고리즘과 하드웨어에 필요한 구조를 생성할 수 있습니다. 사용자가 새로운 추론 규칙을 등록하고 기존 규칙과 매끄럽게 통합할 수 있게 하기 때문입니다.
 
@@ -181,7 +181,7 @@ cost model은 search 과정에서 프로그램의 성능을 빠르게 추정하�
 
 우리는 weighted squared error를 손실 함수로 사용합니다. search space에서 성능이 좋은 프로그램을 식별하는 것이 가장 중요하므로, 더 빠르게 실행되는 프로그램에 더 큰 가중치를 둡니다. 구체적으로, 모델 f가 프로그램 P에 대해 throughput y를 가질 때의 손실 함수는 다음과 같습니다:
 
-![이미지](images/img_10.png)여기에 이미지 삽입
+![이미지](images/ansor_paper_reading/img_10.png)여기에 이미지 삽입
 
 여기서 S(P)는 P 내 가장 안쪽의 비루프 문 집합입니다. 우리는 throughput을 가중치로 직접 사용하여, 저수준 모델 f로 gradient boosting 의사결정 트리[9]를 학습시킵니다. 모든 DAG의 모든 tensor 프로그램에 대해 하나의 모델을 학습시키기 위해, 우리는 동일한 DAG의 모든 프로그램의 throughput을 [0, 1] 범위로 정규화합니다. DNN 최적화 시 측정되는 프로그램 수는 보통 30000개 미만입니다. 이렇게 작은 데이터셋에서 gradient boosting 의사결정 트리를 학습하는 것은 매우 빠르므로, 우리는 매번 증분 갱신 대신 새 모델을 학습시킵니다.
 
@@ -195,27 +195,27 @@ ANSOR는 먼저 계산 그래프를 여러 서브그래프로 분할하고 이 �
 
 핫스팟 서브그래프에 대한 집중 최적화를 보장하기 위해, ANSOR는 가능한 한 최적화 효과가 뚜렷한 서브그래프를 골라 최적화합니다. 예를 들어 DNN 네트워크의 latency를 최소화하기 위해, 우리는 먼저 최적화의 목적 함수를 다음과 같이 제시합니다:
 
-![이미지](images/img_11.png)Schedule Task 설명
+![이미지](images/ansor_paper_reading/img_11.png)Schedule Task 설명
 
 # 7. 평가
 
 여기서는 논문 내 그림을 바탕으로 Ansor의 성능을 간단히 소개합니다.
 
-![이미지](images/img_12.png)단일 operator 성능
+![이미지](images/ansor_paper_reading/img_12.png)단일 operator 성능
 
 Figure 6에서 볼 수 있듯이, 다양한 operator와 BatchSize 설정에서 Ansor는 모두 최고의 성능을 달성했으며, Ansor의 큰 search space가 성능 향상의 핵심 요인입니다.
 
-![이미지](images/img_13.png)서브그래프에서 Ansor의 성능
+![이미지](images/ansor_paper_reading/img_13.png)서브그래프에서 Ansor의 성능
 
 여기서 ConvLayer는 Conv+BN+ReLU를 포함하는 서브그래프이고, TBS는 두 개의 행렬 transpose, 하나의 Batch matmul, 하나의 Softmax를 포함하는 서브그래프입니다. @C는 CPU 결과, @G는 GPU 결과를 나타냅니다. CPU든 GPU든, 이런 흔한 서브그래프 최적화에서 Ansor가 전반적으로 앞섭니다.
 
-![이미지](images/img_14.png)Figure 9
+![이미지](images/ansor_paper_reading/img_14.png)Figure 9
 
 Figure 9는 인기 있는 DNN 모델들이 Intel CPU, ARM CPU, NVIDIA GPU에서의 성능 결과를 보여줍니다. 업계 주류 가속 라이브러리들과 비교해, Ansor는 큰 폭의 성능 우위를 가집니다.
 
 마지막으로 많은 분들이 관심을 가질 만한 데이터는 Ansor의 search 시간입니다. Table 3에서 볼 수 있듯이, 인기 있는 DNN 모델들에서 Ansor의 search 시간은 AutoTVM 대비 모두 향상되었습니다. Ansor의 search space가 더 큼에도 불구하고 말입니다.
 
-![이미지](images/img_15.png)Ansor의 search 시간
+![이미지](images/ansor_paper_reading/img_15.png)Ansor의 search 시간
 
 # 8. 관련 연구
 

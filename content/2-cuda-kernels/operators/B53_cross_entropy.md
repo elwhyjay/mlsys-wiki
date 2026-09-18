@@ -9,7 +9,7 @@
 
 딥러닝에서 Cross Entropy는 가장 흔한 손실 함수이고, 다중 클래스 분류에선 softmax와 짝지어 쓰입니다. 그래서 softmax 다음 차례로 Cross Entropy를 구현해 봅니다. Cross Entropy의 원리와 계산 과정은 이전 글에서 상세히 다뤘으므로 자세한 반복은 생략합니다.
 
-![Cross Entropy Loss 병렬화](images/img_001.png)
+![Cross Entropy Loss 병렬화](images/B53_ops3_cross_entropy/img_001.png)
 *紫氣東來: Cross Entropy Loss 병렬화 방안 (43 추천)*
 
 ## 1. Cross Entropy 순전파 구현

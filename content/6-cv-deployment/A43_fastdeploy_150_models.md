@@ -10,7 +10,7 @@ DefTruth다. 평범한 code writer다. 좋은 기억력보다 엉성한 기록�
 
 이 글은 FastDeploy 기술 공유 column의 첫 번째 글이다. 이후에도 FastDeploy 사용법을 더 공유할 예정이다.
 
-![](images/img_001.png)
+![](images/A43_fastdeploy_150_models/img_001.png)
 
 FastDeploy 기술 공유 column.
 
@@ -18,11 +18,11 @@ FastDeploy 기술 공유 column.
 
 아래 내용은 PaddlePaddle 공식 WeChat 계정에서 옮긴 것이다. 더 많은 내용은 PaddlePaddle 공식 계정을 참고하면 된다.
 
-![animation cover](images/img_002.jpg)
+![animation cover](images/A43_fastdeploy_150_models/img_002.jpg)
 
 AI 산업 응용의 발전 속도가 점점 빨라지면서, 개발자가 마주해야 하는 adaptation과 deployment 작업도 점점 복잡해지고 있다. 계속 등장하는 algorithm model, 다양한 architecture의 AI hardware, 서로 다른 deployment requirement(server, service deployment, embedded, mobile 등), 다른 OS와 development language는 AI developer가 project를 실제로 landing하는 데 적지 않은 부담을 준다.
 
-![](images/v2-9227426d4023b8d567c62cba6a4e6a14_1440w.jpg)
+![](images/A43_fastdeploy_150_models/v2-9227426d4023b8d567c62cba6a4e6a14_1440w.jpg)
 
 AI deployment landing의 어려움을 해결하기 위해 FastDeploy project를 시작했다. FastDeploy는 산업 landing scenario에서 중요한 AI model의 model API를 표준화하고, 다운로드하면 바로 실행할 수 있는 demo example을 제공한다. 전통적인 inference engine과 비교해 end-to-end inference performance optimization을 수행한다. FastDeploy는 online(service deployment)과 offline deployment 형태도 지원해 서로 다른 developer의 deployment 요구를 만족한다.
 
@@ -34,7 +34,7 @@ AI deployment landing의 어려움을 해결하기 위해 FastDeploy project를 
 
 Project link:
 
-![](images/img_003.png)
+![](images/A43_fastdeploy_150_models/img_003.png)
 
 GitHub - PaddlePaddle/FastDeploy: An easy-to-use and fast deep learning model deployment toolkit for cloud and edge. Vision, Text, Audio, Video의 주요 scenario와 150+ SOTA model을 포함하고, end-to-end optimization과 multi-platform, multi-framework support를 제공한다.
 
@@ -50,13 +50,13 @@ GitHub - PaddlePaddle/FastDeploy: An easy-to-use and fast deep learning model de
 
 - **all-scenario: code 한 세트로 cloud, edge, device의 multi-platform, multi-hardware를 모두 다룬다. CV, NLP, Speech를 포괄하고 Paddle Inference, TensorRT, OpenVINO, ONNX Runtime, Paddle Lite, RKNN 등 backend를 지원한다. 일반적인 NVIDIA GPU, x86 CPU, ARM CPU(mobile, ARM board), Rockchip NPU(RK3588, RK3568, RV1126, RV1109, RK1808), Amlogic NPU(A311D, S905D) 등 cloud-edge-device scenario의 여러 AI hardware deployment를 지원한다. 동시에 service deployment, offline CPU/GPU deployment, edge/mobile deployment 방식을 지원한다. 서로 다른 hardware에 대해서도 unified API로 data center, edge deployment, device-side deployment를 자연스럽게 전환한다.**
 
-![](images/v2-33fad1acf3a3948b160782d994c69203_1440w.jpg)
+![](images/A43_fastdeploy_150_models/v2-33fad1acf3a3948b160782d994c69203_1440w.jpg)
 
 FastDeploy는 CV, NLP, Speech 세 AI domain을 지원한다. image classification, image segmentation, semantic segmentation, object detection, OCR, face detection, face landmark detection, face recognition, portrait matting, video matting, pose estimation, text classification, information extraction, text-image generation, pedestrian tracking, speech synthesis 등 16개 algorithm category를 포괄한다.
 
 또 PaddleClas, PaddleDetection, PaddleSeg, PaddleOCR, PaddleNLP, PaddleSpeech라는 PaddlePaddle의 6개 인기 AI suite의 주요 model을 지원하고, PyTorch, ONNX 등 ecosystem의 인기 model deployment도 지원한다.
 
-![animation cover](images/img_004.jpg)
+![animation cover](images/A43_fastdeploy_150_models/img_004.jpg)
 
 - **easy and flexible: 3줄 코드로 model deployment를 끝내고, 1줄 command로 inference backend와 hardware를 바꾼다. 150+ 인기 model deployment를 빠르게 체험한다.**
 
@@ -109,7 +109,7 @@ automatic compression tool을 통합해 parameter 수를 크게 줄이면서도 
 
 더 많은 performance optimization은 GitHub에서 확인하면 된다.
 
-![](images/v2-33c4cb93f85545c2549705b6fbeb0540_1440w.jpg)
+![](images/A43_fastdeploy_150_models/v2-33c4cb93f85545c2549705b6fbeb0540_1440w.jpg)
 
 ### 3단계 deployment 실전
 
@@ -143,7 +143,7 @@ python infer.py --model yolov7.onnx --image 000000014439.jpg --device gpu --use_
 
 - **inference result example**
 
-![](images/v2-bd0a36ca16a4fc2c0c3b3207e52ba81e_1440w.jpg)
+![](images/A43_fastdeploy_150_models/v2-bd0a36ca16a4fc2c0c3b3207e52ba81e_1440w.jpg)
 
 **Jetson deployment 실전. YOLOv7을 예로 든다.**
 
@@ -179,7 +179,7 @@ make ­j
 
 - **inference result example**
 
-![](images/v2-3f3ec1c03ef1d313bbdcd72d0ca39b01_1440w.jpg)
+![](images/A43_fastdeploy_150_models/v2-3f3ec1c03ef1d313bbdcd72d0ca39b01_1440w.jpg)
 
 ### RK3588 deployment 실전
 

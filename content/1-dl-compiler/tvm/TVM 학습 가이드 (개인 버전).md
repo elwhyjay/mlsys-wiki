@@ -12,7 +12,7 @@
 
 TVM은 PyTorch, TensorFlow, ONNX 등 모든 머신러닝 프레임워크와 위쪽에서 호환되기 위해 Relay IR을 도입했고, 머신러닝 모델은 TVM에 들어온 후 먼저 Relay IR로 변환된다. 동시에 TVM은 모든 하드웨어와 아래쪽에서 호환되기 위해 Tensor IR(줄여서 TIR)을 도입했고, 모델은 지정된 하드웨어용 소스 코드로 컴파일되기 전에 모두 TIR로 lowering된다. 또한, TVM 커뮤니티는 새로운 세대의 중간 표현인 Relax(차세대 Relay라고도 불리며 현재 아직 main 브랜치에 upstream되지 않음: https://github.com/tlc-pack/relax/tree/relax/python/tvm/relax)를 개발 중이다. Relax는 머리말에서 언급한 TVM Unify를 실현하는 핵심 부분이다. TVM frontend의 아키텍처는 대략 다음과 같이 표현할 수 있다.
 
-![](images/img_01.png)TVM frontend 아키텍처 그림
+![](images/tvm_learning_guide/img_01.png)TVM frontend 아키텍처 그림
 
 이어서 Relay, TIR, Relax라는 서로 다른 frontend 표현들을 각각 소개하겠다.
 
@@ -20,7 +20,7 @@ TVM은 PyTorch, TensorFlow, ONNX 등 모든 머신러닝 프레임워크와 위�
 
 Relay든 새로운 세대의 Relax 중간 표현이든 결국 TIR(하드웨어에 가장 가까운 IR)로 lowering되기 때문에 여기서 먼저 TIR을 소개한다. TIR의 코드는 `tvm.tir`에 캡슐화되어 있으며, 하나의 TIR은 목표 하드웨어의 소스 코드나 중간 표현, 예를 들어 C++ 소스, CUDA 소스, LLVM IR 등으로 컴파일될 수 있다. 그렇다면 TIR은 어떻게 목표 하드웨어 코드로 컴파일될까? 이는 TIR의 자료구조가 사실상 AST(추상 구문 트리)이고, 이 구문 트리가 변수 선언, 초기화, 변수 계산, 함수 호출 및 제어 흐름(if-else 조건 판단, 루프 등)을 표현할 수 있기 때문이다. 그래서 TIR에 대응하는 AST를 한 번 순회하기만 하면 1대1로 목표 하드웨어로 번역해 낼 수 있다. 다음 그림으로 이해할 수 있다.
 
-![](images/img_02.png)원본 그림 출처: https://zhuanlan.zhihu.com/p/533161438 (저작권 문제 시 삭제 요청)
+![](images/tvm_learning_guide/img_02.png)원본 그림 출처: https://zhuanlan.zhihu.com/p/533161438 (저작권 문제 시 삭제 요청)
 
 위 그림에는 설명이 필요한 몇 가지 세부사항이 있다. 먼저 IRModule이다. IRModule은 머신러닝 컴파일에서 메타 텐서 함수(즉 PrimFunc)의 집합을 보관하는 컨테이너 객체이며, TVM이 컴파일하는 최소 완전 단위이다. TVM의 서로 다른 frontend 표현은 모두 최종적으로 IRModule에 캡슐화되어 컴파일되며, Linux에서 IRModule은 .so 동적 라이브러리이다. 그리고 PrimFunc는 메타 텐서 함수라고 불리며 내부적으로 완전한 TIR AST를 캡슐화하고 있다. IRModule이 컴파일된 후, 각 PrimFunc는 이 동적 라이브러리의 함수 진입점에 대응하므로 하나의 IRModule은 여러 PrimFunc를 가질 수 있다. 위의 Codegen은 사실상 TIR AST에 대해 중위 순회를 한 다음 1대1로 AST Node를 그에 대응하는 TIR Node의 자료구조로 번역하여 콜백 함수 VisitExpr_와 VisitStmt에 전달하는 것이다. VisitExpr_는 Expression Node를 처리하는 데 쓰이고, VisitStmt는 Statement Node를 처리하는 데 쓰인다. 추후 Codegen을 소개할 때 이 변환 과정을 자세히 살펴보겠다.
 
@@ -71,7 +71,7 @@ Relay든 새로운 세대의 Relax 중간 표현이든 결국 TIR(하드웨어�
 
 Relay IR과 Relax를 이어서 설명하기 전에 먼저 `tvm.ir`이라는 추상화를 살펴보자. TIR이든 Relay/Relax IR이든 모두 IRModule이라는 통일된 최소 컴파일 단위에 대응되며, 동시에 그것들이 공유하는 IR 기반 인프라가 있다. 구체적인 구현은 `https://github.com/apache/tvm/tree/main/include/tvm/ir`와 `https://github.com/apache/tvm/tree/main/src/ir` 디렉토리에 있다.
 
-![](images/img_03.png)tvm.ir 기반 인프라 파일 구조
+![](images/tvm_learning_guide/img_03.png)tvm.ir 기반 인프라 파일 구조
 
 IR에 있어서 Type과 Expr은 특히 중요한 두 개념이다. Type에는 Int, Float, Double 등의 기본 데이터 타입이 포함되며 함수 타입, Tensor 타입 등 사용자 정의의 복잡한 타입도 포함된다. Expr은 Low-level IR로 직접 매핑될 수 있는 PrimExpr를 포함하고 RelayExpr도 포함한다.
 
@@ -932,7 +932,7 @@ D2는 우리가 더 낮은 수준의 추상화를 고수준 추상화(R.function
 
 다시 첫머리의 그림으로 돌아가 보자.
 
-![](images/img_05.png)TVM frontend 아키텍처 그림
+![](images/tvm_learning_guide/img_05.png)TVM frontend 아키텍처 그림
 
 우리는 Relay에서 TIR로 가는 두 가지 경로가 있음을 발견할 수 있다. 첫 번째는 직접 TIR로 가는 것인데, 예를 들어 PrimExpr에서 파생된 노드, 가령 IntImmNode는 TIR로 직접 매핑될 수 있다. 다른 하나는 Relay에서 Conv 같은 Op의 계산 로직이 TOPI로 표현된다는 것이다. TOPI는 TVM 자체의 op 라이브러리이며, 이러한 op들은 TE를 통해 표현될 수 있다.
 
@@ -1014,7 +1014,7 @@ D2는 우리가 더 낮은 수준의 추상화를 고수준 추상화(R.function
 
 두 출력으로부터 우리는 결국 만들어진 IRModule이 사실상 완전히 같다는 것을 볼 수 있다. 그리고 이 IRModule은 목표 하드웨어에서 실행 가능한 코드로 컴파일될 수 있다. TE가 어떻게 TIR로 컴파일되는지 더 깊이 알고 싶다면 「TVM 자체 자초지종(3): TE의 개념과 컴파일 원리」를 읽어 보자. 여기서는 작성자의 글에 있는 핵심 그림을 빌려 간단히 설명한다.
 
-![](images/img_06.png)출처: https://zhuanlan.zhihu.com/p/534313816 작성자: Kord (저작권 문제 시 삭제 요청)
+![](images/tvm_learning_guide/img_06.png)출처: https://zhuanlan.zhihu.com/p/534313816 작성자: Kord (저작권 문제 시 삭제 요청)
 
 위에서 아래로 보면, 여기의 List[PrimExpr]는 이 lambda 표현식의 PrimExpr 집합이다. 첫 번째 PrimExpr는 A(*i), 두 번째 PrimExpr는 1.0이며, +는 TIR의 ExprOp에 대응한다(`https://github.com/apache/tvm/blob/main/python/tvm/tir/expr.py#L66`). Expr가 1개 이상의 PrimExpr에 작용해 얻는 결과 역시 PrimExpr다. 사실 여기 List[PrimExpr]는 이 lambda 표현식의 AST 표현에 대응한다. 다음으로 te.compute의 코드를 보자(`https://github.com/apache/tvm/blob/main/python/tvm/tir/expr.py#L66`).
     
@@ -1727,7 +1727,7 @@ GraphExecutor는 TVM이 정적 모델을 위해 설계한 실행 엔진이다(�
 
 여기서는 먼저 GraphExecutor 객체를 만들어 Relay Function의 컴파일 결과로 초기화한다. RelayFunction의 컴파일 결과는 직렬화된 graph 구조(executor_config에 대응), kernel(mod에 대응), weight(params에 대응)를 포함한다.
 
-![](images/img_07.png)relay.build 반환 결과: https://github.com/apache/tvm/blob/main/python/tvm/relay/build_module.py#L178
+![](images/tvm_learning_guide/img_07.png)relay.build 반환 결과: https://github.com/apache/tvm/blob/main/python/tvm/relay/build_module.py#L178
 
 이어서 GraphExecutor 객체에 입력 데이터를 설정한 다음, run 서브 함수를 호출해 kernel을 실행하고, 마지막으로 get_output로 출력 결과를 얻는다. GraphExecutor의 구현은 주로 두 함수가 있다. 첫 번째 함수가 바로 Init이다(https://github.com/apache/tvm/blob/main/src/runtime/graph_executor/graph_executor.cc#L77).
     
@@ -1992,7 +1992,7 @@ Intel의 한 엔지니어가 「TVM Runtime System 개요」에서 TVM의 Relay 
 
 CodegenC 클래스의 정의는 VisitExpr_와 VisitStmt_라는 두 함수를 오버로드하여 각각 TIR AST의 Expression 노드(표현식)와 Statement 노드(문장)를 처리한다. Expression(표현식)에는 흔한 변수 선언, 연산, 판단, 함수 호출이 포함되며, Statement(문장)에는 제어 흐름(if-else, Loop 등), 메모리 관리, 할당 등의 작업이 포함된다. https://github.com/apache/tvm/blob/main/src/target/source/codegen_c.cc 에서 각 종류의 AST 노드에 대한 코드 생성을 한다(파일 출력 스트림으로 보낸다). 예를 들어,
 
-![](images/img_08.png)TIR AST 노드를 1대1로 C 코드로 번역
+![](images/tvm_learning_guide/img_08.png)TIR AST 노드를 1대1로 C 코드로 번역
 
 CUDA, LLVM IR 등 다른 종류의 Codegen의 원리도 모두 같으며, 단지 target이 달라서 AST Node가 번역되는 목표 코드 문장의 문법에 약간의 차이가 있을 뿐이다.
 
@@ -2138,7 +2138,7 @@ CUDA, LLVM IR 등 다른 종류의 Codegen의 원리도 모두 같으며, 단지
 
 현재 디렉토리에 시각화된 png 이미지가 생성된다. 미리 보자.
 
-![](images/img_09.png)Relay Function의 시각화 결과
+![](images/tvm_learning_guide/img_09.png)Relay Function의 시각화 결과
 
 우리는 TIR AST가 일련의 PrimExpr와 RelayExpr(non-PrimExpr)로 표현되며 이들이 모두 TVM의 Expr base class를 상속한다는 것을 알고 있다. 그래서 TVM은 TIR AST의 순회를 위해 도구 클래스 ExprFunctor를 만들었다. 이 시각화 도구는 ExprFunctor를 상속하여 계산 graph를 순회하고 시각화 효과를 사용자 정의한 것이다.
 

@@ -8,9 +8,9 @@ Layout과 Tensor는 데이터의 논리 배치·데이터를 기술하는 추상
 
 딥러닝의 등장은 연산 능력, 특히 행렬 연산 능력의 수요를 크게 키웠습니다. NVIDIA는 Google TPU에 대응하고 시장을 선점하고자 **2017년 Volta 아키텍처에 Tensor Core를 탑재**해 발표했습니다. Tensor Core 이전에는 행렬 계산을 SIMT 방식의 CUDA Core 또는 전통적 CPU의 SIMD로 처리했습니다. Tensor Core는 행렬 계산 전용 HW 유닛으로, **`D = A × B + C`** 형태의 작은 행렬 곱을 고효율로 수행합니다. 국내 주력인 Ampere의 A100에 탑재된 Tensor Core는 단일 사이클에 `8×4×8`(MNK 표기: A는 `8×8`, B는 `8×4`, C는 `8×8`) 반정밀도 행렬 곱을 완료할 수 있습니다. CPU·CUDA Core보다 훨씬 효율적이어서 연산 수요가 큰 딥러닝(컨볼루션·행렬 곱·어텐션 등)은 대부분 Tensor Core로 처리됩니다.
 
-![Figure 1. Tensor Core의 정밀도별 효율 (참고 1에서 인용)](images/img_001.jpg)
+![Figure 1. Tensor Core의 정밀도별 효율 (참고 1에서 인용)](images/B12_cute_mma_abstraction/img_001.jpg)
 
-![Figure 2. 아키텍처별 지원 정밀도 (참고 1에서 인용)](images/v2-f4cec73248455ac74f231a17c76300d4_1440w.jpg)
+![Figure 2. 아키텍처별 지원 정밀도 (참고 1에서 인용)](images/B12_cute_mma_abstraction/v2-f4cec73248455ac74f231a17c76300d4_1440w.jpg)
 
 Tensor Core는 Volta/Turing/Ampere에서는 입출력이 CUDA Core와 공유하는 **레지스터**에 있습니다. **Hopper**는 더 나은 대역폭을 위해 입력 데이터를 **shared memory에 직접** 둘 수 있습니다. Tensor Core는 여러 정밀도를 지원하며 정밀도별 효율이 다릅니다.
 
@@ -34,7 +34,7 @@ CuTe는 고성능 프리미티브 표현·추상으로서 **`mma` 구현에 바�
 
 MMA 핵심 구조의 관계는 그림 3과 같이 **하드웨어·명령 추상**, **논리 추상**, **CUDA 프로그래밍 명령** 세 계층으로 나타납니다.
 
-![Figure 3. CuTe MMA 핵심 구조와 상호 관계](images/v2-2eae7397e8bedca64b893d8d5a1b9967_1440w.jpg)
+![Figure 3. CuTe MMA 핵심 구조와 상호 관계](images/B12_cute_mma_abstraction/v2-2eae7397e8bedca64b893d8d5a1b9967_1440w.jpg)
 
 ## MMAOperation
 
@@ -59,7 +59,7 @@ struct SM75_16x8x8_F32F16F16F32_TN {
 };
 ```
 
-![Figure 4. MMA_Traits가 TiledMMA에 제공하는 정보 (참고 3에서 인용)](images/v2-30bd5056c5bd419c6335c609701538bb_1440w.jpg)
+![Figure 4. MMA_Traits가 TiledMMA에 제공하는 정보 (참고 3에서 인용)](images/B12_cute_mma_abstraction/v2-30bd5056c5bd419c6335c609701538bb_1440w.jpg)
 
 ## MMA_Traits
 

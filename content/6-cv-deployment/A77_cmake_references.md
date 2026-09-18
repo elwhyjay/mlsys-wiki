@@ -4,7 +4,7 @@
 
 ## CMake 참고 자료
 
-![](images/v2-bffb2bf11422c5ef7d8949788114c2ab.png)
+![](images/A77_cmake_references/v2-bffb2bf11422c5ef7d8949788114c2ab.png)
 
 ## CMake 참고 문헌
 

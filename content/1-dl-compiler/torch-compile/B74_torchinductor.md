@@ -30,7 +30,7 @@ def decompose(self, *args, **kwargs):
 
 이를 통해 high level op을 단계적으로 ATen op으로 분해하는 과정을 구현합니다. 전체적으로 PrimTorch는 일종의 규범으로서, 모든 op을 약속된 op 규범 집합으로 분해하며, 개발자와 하드웨어 벤더 사이의 중간 브릿지 역할을 합니다. PyTorch 프런트엔드는 op을 PrimTorch로 분해 매핑하고, 하드웨어 벤더는 이러한 특정 op에 대해 최적화를 수행합니다.
 
-![PyTorch의 2000+ op 세분화](images/v2-50c0d4d6a62b9e1defb5507a778a97fe_1440w.jpg)
+![PyTorch의 2000+ op 세분화](images/B74_torch_compile_torchinductor/v2-50c0d4d6a62b9e1defb5507a778a97fe_1440w.jpg)
 
 ## TorchInductor
 
@@ -40,7 +40,7 @@ TorchInductor는 PyTorch의 고성능 컴파일 백엔드로, 최적화된 계�
 
 > TorchInductor의 핵심 구현 로직은 다음과 같습니다. 관심 있는 분은 뒤의 코드 해석 부분도 참고해 주세요.
 
-![TorchInductor 함수 호출](images/v2-4771661efc35e7737d8a16d7feb66e99_1440w.jpg)
+![TorchInductor 함수 호출](images/B74_torch_compile_torchinductor/v2-4771661efc35e7737d8a16d7feb66e99_1440w.jpg)
 
 `fx_codegen_and_compile()`에서 비교적 중요한 세 가지 함수는 다음과 같습니다:
 - **_recursive_post_grad_passes**: 계산 그래프의 추가 최적화를 담당하며, 다음을 포함합니다:

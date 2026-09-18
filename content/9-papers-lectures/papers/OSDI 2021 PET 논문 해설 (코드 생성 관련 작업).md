@@ -17,7 +17,7 @@ Ansor든 PET든 개인적으로는 모두 상당히 인상적이라고 생각한
 
 ## **0x1. 제목과 저자**
 
-![이미지](images/img_01.png)
+![이미지](images/osdi_2021_pet/img_01.png)
 
 PET 제목과 저자
 
@@ -45,7 +45,7 @@ PET 제목과 저자
 
 이 절은 별로 다룰 내용이 없으며, Introduction과 약간 중복되는 느낌이다. 단지 그림 1을 통해 부분 등가 변환이 무엇인지 이해하는 데 도움을 주려 한다. 먼저 그림 1은 다음과 같다:
 
-![이미지](images/img_02.png)
+![이미지](images/osdi_2021_pet/img_02.png)
 
 그림 1
 
@@ -57,19 +57,19 @@ PET 제목과 저자
 
 PET는 **최초로** 부분 등가 변환을 활용해 Tensor program을 최적화한 프레임워크이며, Tensor program의 다중선형(multi-linear) 특성을 활용한다. 먼저 **Multi-linear tensor programs (MLTPs)**, 즉 다중선형 Tensor program이 무엇인지 설명할 필요가 있다. 이후로는 일관되게 MLTPs라는 표현을 사용하겠다. n개의 입력 tensor I1,...,InI_1, ..., I_n을 가지는 Op가 있을 때, 각 입력 IkI_k에 대해 선형이라면 그 Op를 다중선형이라고 한다:
 
-![이미지](images/img_03.png)
+![이미지](images/osdi_2021_pet/img_03.png)
 
 선형의 정의
 
 여기서 X와 Y는 IkI_k와 같은 shape을 가진 임의의 tensor이며, α\alpha는 임의의 scalar다. 딥러닝 모델은 일반적으로 선형(Conv, MatMul) 및 비선형(예: ReLU, Sigmoid) operator로 구성되며, PET 프레임워크에서 사용하는 선형 operator는 Table 1과 같다:
 
-![이미지](images/img_04.png)
+![이미지](images/osdi_2021_pet/img_04.png)
 
 PET가 사용하는 다중선형 operator
 
 이 표는 확장 가능하다는 점에 유의하자. **하나의 프로그램이 다중선형 Tensor program(MLTP)인 것은 프로그램 내의 모든 Op가 다중선형일 때, 그리고 오직 그때뿐이다**. 다음으로 PET의 설계 개요, 즉 Figure 2에 대해 설명하겠다.
 
-![이미지](images/img_05.png)
+![이미지](images/osdi_2021_pet/img_05.png)
 
 PET 개요
 
@@ -81,7 +81,7 @@ PET 개요
 
 이 절은 주로 Mutation Generator의 알고리즘 구현 흐름을 설명하고 몇 가지 전형적인 변형 패턴을 소개한다. Mutation Generator의 알고리즘은 아래 그림과 같다:
 
-![이미지](images/img_06.png)
+![이미지](images/osdi_2021_pet/img_06.png)
 
 Mutation Generator Algorithm
 
@@ -94,7 +94,7 @@ Mutation Generator Algorithm
 
 
 
-![이미지](images/img_07.png)
+![이미지](images/osdi_2021_pet/img_07.png)
 
 Mutation Generator를 통해 Dilated Conv를 일반 Conv 계산으로 변환해 가속을 얻음
 
@@ -112,13 +112,13 @@ PET에서 가장 중요한 부분이 바로 이 Mutation Corrector라고 할 수
 
 여기서는 논문의 서술 방식을 그대로 따르지 않고 내 나름의 이해 방식으로 설명하여, 더 알기 쉽고 덜 이론적으로 풀어보겠다. 먼저 3\times 3 convolution은 다음 공식으로 표현될 수 있다:
 
-![이미지](images/img_08.png)
+![이미지](images/osdi_2021_pet/img_08.png)
 
 3x3 convolution의 공식 표현
 
 여기서 I_1과 I_2는 각각 입력 Tensor와 convolution Kernel을 나타내고, D, H, W는 각각 입력 Tensor I_1의 channel 수, 길이, 너비를 나타낸다. 합 기호 위와 아래의 숫자는 각각 합 구간의 상한과 하한을 나타낸다. 그리고 이 convolution의 출력 Tensor에 대해서는 각 원소가 하나의 합 영역에 대응된다. 위에서 정의한 convolution operator에 대해, 좌상단 출력 위치 즉 h = 0, w = 0을 계산할 때는 2\times 2 Kernel만 관여한다. 즉 0<=x<=1, 0<=y<=1인데, 이 위치에는 좌측 이웃이나 상단 이웃이 없기 때문이다. 논문에서는 합 영역이 동일한 위치들을 하나의 Box라고 부른다. 이 convolution 예시에서 모든 Box는 Figure 4와 같이 표현될 수 있다.
 
-![이미지](images/img_09.png)
+![이미지](images/osdi_2021_pet/img_09.png)
 
 3x3 convolution 예시는 총 9개의 box가 있음
 
@@ -128,7 +128,7 @@ PET에서 가장 중요한 부분이 바로 이 Mutation Corrector라고 할 수
 
 위 두 정리를 통해 PET는 매우 적은 위치에서만 검증을 수행해도 어떤 위치가 원본 프로그램과 등가가 아닌지 결정할 수 있다. 다음 그림은 정리 1과 정리 2가 검증해야 할 입력 원소 수에 미치는 영향을 보여준다.
 
-![이미지](images/img_10.png)
+![이미지](images/osdi_2021_pet/img_10.png)
 
 Table 2
 
@@ -140,7 +140,7 @@ Table 2
 
 
 
-![이미지](images/img_11.png)
+![이미지](images/osdi_2021_pet/img_11.png)
 
 Box 전파 알고리즘 예시
 
@@ -153,7 +153,7 @@ Box 전파 알고리즘 예시
 
 이 부분은 위의 Step 3에 대한 설명이다. Figure 6을 보자:
 
-![이미지](images/img_12.png)
+![이미지](images/osdi_2021_pet/img_12.png)
 
 Figure 6
 
@@ -163,7 +163,7 @@ Figure 6(a)는 표준 convolution 과정을 나타낸다. 그 다음 Figure 6(b)
 
 이 절에서는 PET의 Program Optimizer를 소개한다. 이는 등가 변환과 부분 등가 변환을 결합하여 더 큰 프로그램 최적화 search space를 탐색할 수 있다. **먼저 Program Optimizer는 입력 프로그램을 더 작은 크기의 sub-program 여러 개로 분해해 Mutation Generator에 전달한다. 그 다음 각 sub-program을 최적화하기 위해 PET는 풍부한 search space에서 변형에 참여하는 Op 집합과 DFS 검색 알고리즘의 반복 횟수를 조정해 가장 좋은 변형 프로그램을 찾는다. 마지막으로 모든 최적화된 sub-program을 함께 이어 붙일 때 경계를 가로지르는 추가 후처리 최적화를 적용하는데, 여기에는 operator fusion, 중복 Op 제거 등이 포함된다**. 아래의 알고리즘 2는 Program Optimizer의 전체 흐름을 설명한다:
 
-![이미지](images/img_13.png)
+![이미지](images/osdi_2021_pet/img_13.png)
 
 Program Optimizer의 흐름
 
@@ -182,7 +182,7 @@ Program Optimizer의 흐름
 
 **이 절의 마지막에서는 Post-Optimizations에 대해서도 다룬다**. 위에서 언급했듯이 마지막에 모든 sub-program 변형체는 함께 이어 붙여져야 한다. 이들의 입력과 출력 tensor를 연결하는 것 외에도 PET는 **sub-program 경계를 가로질러 일부 후처리 최적화를 수행하여 프로그램 성능을 더욱 향상시킨다**. PET의 Mutation Generator는 많은 양의 Reshape와 Transpose(R/T) operator를 생성하며, 특히 sub-program의 시작과 끝에 그렇다는 점에 주목하자. 따라서 sub-program을 가로질러 이 R/T operator들을 fusion하고 위의 sub-program 최적화에서 제외되었던 비선형 operator들도 추가로 fusion할 기회가 있다. Figure 7은 두 개의 최적화된 sub-program을 포함하는 예시를 보여준다. sub-program의 경계를 최적화하기 위해 PET는 먼저 비선형 operator와 R/T operator를 재배열하여 두 sub-program 사이의 R/T operator를 한데 모은다. Figure 7(b)에 나타난 것처럼 이러한 재배열의 정확성은 완전히 보장된다. 재배열은 또한 PET가 비선형 활성화 operator와 다른 operator를 fusion할 수 있게 해주는데, 예를 들어 Conv와 ReLU를 Conv-ReLU로 fusion하는 것이다. Figure 7(c)와 같다.
 
-![이미지](images/img_14.png)
+![이미지](images/osdi_2021_pet/img_14.png)
 
 후처리 최적화 예시
 
@@ -202,7 +202,7 @@ Program Optimizer의 흐름
 
 논문이 제시한 실험 결과는 상당히 풍부하므로, 여기서는 모든 실험 결과 도표를 자세히 다루지는 않겠다. 가장 중요한 실험 결과 그림 하나만 다루겠다:
 
-![이미지](images/img_15.png)
+![이미지](images/osdi_2021_pet/img_15.png)
 
 여러 네트워크에서 PET의 성능
 
@@ -210,7 +210,7 @@ ResNet-18, CSRNet, InceptionV3, BERT, ResNet33D-18에서 현재 인기 있는 �
 
 실험 부분에서는 또한 PET가 TVM 및 Ansor와 쉽게 결합될 수 있어 생성되는 Tensor program의 효율을 더욱 향상시킬 수 있다고 언급한다. **PET에서는 cuDNN/cuBLAS/TVM/Ansor 등 인기 있는 최적화 라이브러리와 codegen 컴파일러를 backend로 사용해 효율적인 Tensor program을 생성할 수 있다**. Figure 12는 이 프레임워크들이 backend로 사용될 때 일반적인 단일 operator의 가속 효과를 보여준다:
 
-![이미지](images/img_16.png)
+![이미지](images/osdi_2021_pet/img_16.png)
 
 서로 다른 프레임워크나 라이브러리를 backend로 사용할 때 일반적인 단일 operator의 가속 효과
 

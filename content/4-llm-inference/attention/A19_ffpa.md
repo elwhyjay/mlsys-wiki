@@ -3,13 +3,13 @@
 
 ## 0x00 머리말
 
-![](images/v2-78a59cb237b3248b6cdda6209daecf6c_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-78a59cb237b3248b6cdda6209daecf6c_1440w.png)
 
 얼마 전 xlite-dev/CUDA-Learn-Notes에서 **FlashAttention을 재현하며 즉흥적으로 끄적였던** 최적화를 xlite-dev/ffpa-attn-mma repo로 옮겨 다듬었다. 최적화된 알고리즘은 일단 **FFPA(Split-D)**: Yet another Faster Flash Prefill Attention with **O(1) SRAM complexity** for **large headdim** (D > 256), **SDPA EA** 대비 **1.8x~3x↑** 빠르다.
 
 실제 응용에서 headdim > 256인 경우는 많지 않다. 옛 Diffusion 모델 일부에서나 보일 정도고, 대부분의 LLM/VLM과 현재 DiT 구조의 Diffusion 모델은 headdim ≤ 256이다. 그래서 FFPA를 만들 때는 "그냥 한번 시도해 보자"는 마음이었는데, 의외로 동작했다. 만들어 두고 한쪽에 묵혀 둔 상태였다. 응용 영역은 좁지만, 최근 화제가 된 DeepSeek의 **MLA** 부분에 FFPA의 아이디어를 적용해 fully fused MLA로 구현해 봄 직하다. 행렬 흡수 후 MLA는 대형 headdim의 Attention과 닮았기 때문이다. 오늘은 구덩이 메우는 차원에서 FFPA의 아이디어와 고민한 지점을 간단히 정리한다. 이 글을 읽으려면 FlashAttention의 기본 지식이 필요하다. 다음 글을 참고하자.
 
-![](images/img_001.png)
+![](images/A19_ffpa_split_d_attention/img_001.png)
 *[Attention 최적화][2w자] 원리편: Online-Softmax에서 FlashAttention V1/V2/V3까지*
 
 저자의 더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA에서 확인할 수 있다. LLM/VLM 글 정리와 FlashAttention, SGEMM, HGEMM, GEMV 같은 대표 CUDA kernel 예제 구현이 포함되어 있고, 누적 3k+ stars를 기록했다.
@@ -38,7 +38,7 @@ Attention 계산에서 query마다의 Attention 계산은 완전히 독립적이
 
 thread block 관점에서 각 block은 Q의 일부를 담당하므로 block이 가지는 Q는 고정이고, 서로 다른 block이 가지는 Q는 겹치지 않는다. K, V block은 Tc for loop에서 매번 갱신된다. Q, K, V block 데이터가 SRAM에 올라오면, 핵심인 QKᵀ와 PV matmul을 수행한다.
 
-![](images/img_1.png)
+![](images/A19_ffpa_split_d_attention/img_1.png)
 *FlashAttention-2 forward pass*
 
 ### Headdim ≤ 256의 결정 요인
@@ -101,7 +101,7 @@ __device__ __forceinline__ void m16n8k16_f16f16f32(
 
 ### Split-D (Split Headdim): MMA level QKV Fine-grained tiling
 
-![](images/v2-78a59cb237b3248b6cdda6209daecf6c_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-78a59cb237b3248b6cdda6209daecf6c_1440w.png)
 
 SRAM 데이터의 사용 양상을 짚었다면 FlashAttention이 더 큰 headdim을 지원하도록 확장하는 방법은 직관적이다. **Split-D (Split Headdim), 즉 Headdim 차원에서도 tiling을 계속하면 된다.** 핵심은 [Br, d]를 [Br, 16]으로 바꾸고, 늘어난 SRAM/HBM IO access는 multi-stages로 가린다. Br/Bc가 상수(예: 64)이므로 SRAM 사용량은 [64, 16] 상수가 되어 headdim에 무관해진다. O(1) SRAM 복잡도다. 그래서 headdim을 매우 크게 확장할 수 있다. **FFPA**가 정확히 그렇게 한다. FFPA 코드 일부:
 
@@ -208,7 +208,7 @@ utils::fill_3D_regs<uint32_t, kWarpTileSeqLenP, kWarpTileHeadDimV,
 
 따라서 headdim이 1024를 넘어가면 register가 폭주한다. 필요한 register가 256(CUDA에서 thread 하나가 사용할 수 있는 최대 register 수)을 넘어가 성능이 급락한다. headdim을 무한대로 확장하려면 register 복잡도 문제도 풀어야 한다. 물론 그냥 폭주하게 두고 돌릴 수도 있다. **이런 고려로 SRAM·register 복잡도에 따라 FFPA L1-L3 3단계 design을 설계했다** (현재는 L1만 구현).
 
-![](images/v2-0a31c2736f1513db5ac78b99bbda351a_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-0a31c2736f1513db5ac78b99bbda351a_1440w.png)
 *FFPA L1~L3: FlashAttention + QKV Fine-grained Tiling at MMA level*
 
 L2, L3까지 구현하면 설계상 headdim을 무한대까지 지원할 수 있지만 성능은 장담하기 어렵다. 현재 L1만 구현했다. 다시 말하지만 headdim > 256 응용 영역이 너무 좁아 L2, L3 구현에 동력이 없다.
@@ -229,7 +229,7 @@ L2, L3까지 구현하면 설계상 headdim을 무한대까지 지원할 수 있
 - Collective Store
 - Reg Double Buffers 등
 
-![](images/v2-842dd15eed60a9d5b9ab4dad33e5aef7_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-842dd15eed60a9d5b9ab4dad33e5aef7_1440w.png)
 *FFPA Kernel Core Features*
 
 각 feature마다 구현 세부가 따로 있고, 관심 있는 사람은 직접 코드를 보면 된다(ffpa-attn-mma). 추후 별도 글로 다룰 수도 있겠다. Tile Block, Tile MMAs, Copy Async, Multi-Stage, Reg Double Buffers는 HGEMM의 고전 최적화 기법이다. 특히 Multi-Stage와 Reg Double Buffers는 Split-D (Split Headdim) 알고리즘에 그대로 가져다 쓸 수 있다. Split-Q는 FA에서 자연스럽게 이어받은 것으로 Split-D와 충돌하지 않는다. Collective Store는 warp shuffle 명령으로 추가 SRAM 없이 128 bits 대단어 store를 구현한다. Mixed MMA F32/F16 Acc는 혼합 정밀도, 예컨대 Q@Kᵀ MMA Acc F32 + P@V MMA Acc F16. 그 외 SRAM 공유, Q s2r/g2s 영속화 등의 전략도 있다. 함수 시그니처:
@@ -281,12 +281,12 @@ FFPA의 large headdim 성능을 간단히 보여 준다. 실험을 좀 돌려 �
 
 ### FFPA on NVIDIA L20
 
-![](images/v2-d975c5f745500f6c20e4cedfc68b7b75_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-d975c5f745500f6c20e4cedfc68b7b75_1440w.png)
 *NVIDIA L20*
 
 ### FFPA on NVIDIA 4090
 
-![](images/v2-9f071cde9f352348e1a39b75cf3f0a08_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-9f071cde9f352348e1a39b75cf3f0a08_1440w.png)
 *NVIDIA 4090*
 
 전체 benchmark와 FFPA 테스트 방법은 ffpa-attn-mma를 참고.
@@ -297,7 +297,7 @@ FFPA의 large headdim 성능을 간단히 보여 준다. 실험을 좀 돌려 �
 
 ### 혼합 정밀도 성능 이득
 
-![](images/v2-76d152d07a1809a05974d47d21a4fcce_1440w.png)
+![](images/A19_ffpa_split_d_attention/v2-76d152d07a1809a05974d47d21a4fcce_1440w.png)
 *FFPA QKᵀ MMA Acc F32 + PV MMA Acc F16 TFLOPS*
 
 ### 혼합 정밀도 수치 정확도

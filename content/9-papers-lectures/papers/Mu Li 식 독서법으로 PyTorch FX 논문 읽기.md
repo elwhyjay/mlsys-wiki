@@ -21,7 +21,7 @@ PyTorch FX 논문 링크는 https://arxiv.org/pdf/2112.08429.pdf 입니다. 아�
 
 # 0x1. 제목
 
-![이미지](images/img_01.png)torch.fx 제목과 저자
+![이미지](images/pytorch_fx_paper_reading/img_01.png)torch.fx 제목과 저자
 
 다음과 같이 번역할 수 있습니다: TORCH.FX: Python 기반 딥러닝의 실용적인 프로그램 **「capture」** 와 **「변환(transformation)」**. 여기서 "Python 기반 딥러닝의 실용 프로그램"은 PyTorch 기반으로 개발된 모델 프로그램으로 이해할 수 있고, 그 다음 핵심은 capture와 변환입니다. 지금은 여기서 capture와 변환이 무엇을 의미하는지 아직 분명하지 않은데, 계속 읽어 나가면 됩니다. 잠깐 여담을 하자면, 저는 반년 전부터 FX에 관심을 가져왔고, 예전에 OneFlow framework에서도 FX를 성공적으로 통합하여 QAT 작업을 한 번 해봤습니다. 그 당시에는 FX에 아직 논문이 없었기 때문에, 이 논문은 TORCH.FX라는 특성에 대한 정리이자 자리매김 같은 느낌이 듭니다.
 
@@ -85,11 +85,11 @@ PyTorch FX 논문 링크는 https://arxiv.org/pdf/2112.08429.pdf 입니다. 아�
 
 Figure 1은 `torch.fx.symbolic_trace`를 사용하여 프로그램을 capture하는 예시를 보여줍니다. 입력은 `torch.nn.Module`이거나 함수가 될 수 있으며, capture 후의 구조는 Graph 객체에 저장됩니다. 이 `Graph` 객체는 `GraphModule` 안의 모듈 파라미터들과 결합되며, `GraphModule`은 `torch.nn.Module`의 서브클래스이고, 그 `forward` 메서드는 capture된 `Graph`를 실행합니다. 우리는 이 graph의 `Nodes`를 출력하여 capture된 IR을 볼 수 있습니다. `placeholder` node는 입력을 표현하고, 단일 `output` node는 `Graph`의 결과를 표현합니다. `call_function` node는 호출할 Python 함수를 직접 참조합니다. `call_method` node는 첫 번째 인자의 메서드를 직접 호출합니다. `Graph`는 호출을 위해 Python 코드(`traced.code`)로 다시 조립됩니다.
 
-![이미지](images/img_02.png)Figure 1
+![이미지](images/pytorch_fx_paper_reading/img_02.png)Figure 1
 
 Figure 2는 `torch.fx`를 사용한 변환의 예시를 보여줍니다. 변환은 어떤 activation의 모든 instance를 찾아 다른 것으로 교체하는 것입니다. 여기서는 이를 사용해 `relu`를 `gelu`로 교체합니다.
 
-![이미지](images/img_03.png)Figure 2
+![이미지](images/pytorch_fx_paper_reading/img_03.png)Figure 2
 
 ## 0x6.1 프로그램 capture
 
@@ -105,7 +105,7 @@ Figure 2는 `torch.fx`를 사용한 변환의 예시를 보여줍니다. 변환�
 
 `torch.fx` 변환 pipeline의 마지막 단계는 코드 생성입니다. `torch.fx`는 Python 생태계를 빠져나와 맞춤형 runtime으로 들어가는 것이 아니라, 변환된 IR로부터 유효한 Python 소스 코드를 생성합니다. 그런 다음 이 변환된 코드는 Python으로 로드되어, 호출 가능한 Python 객체를 생성하고, `forward` 메서드로서 `GraphModule` 인스턴스에 설치됩니다. 코드 생성을 사용하면 `torch.fx` 변환의 결과를 모델에 설치하여 추가적인 변환에도 사용할 수 있습니다. 예를 들어, 그림 3에서는 원본 프로그램을 trace한 결과를 받아 그것을 새 모듈의 activation function으로 설치합니다.
 
-![이미지](images/img_04.png)Figure 3
+![이미지](images/pytorch_fx_paper_reading/img_04.png)Figure 3
 
 여기까지 PyTorch FX 특성에 대한 정독이 끝났습니다. 다만 FX 논문을 보면 Design Decisions라는 절도 있는데, 거기서는 Symbolic Tracing, Configurable Program Capture, AoT Capture without Specialization, Python-based IR and Transforms 등 FX 구현이 의존하고 있는 일부 아이디어와 결정, 그리고 그 장점들을 각각 소개합니다. 저는 이 절이 Introduction의 강화판이라고 이해하고 있으므로, 이 작은 절에 대한 설명은 더 이상 진행하지 않겠습니다. 만약 어떤 디테일을 놓치는 것이 걱정된다면 논문 원문을 읽어보시기 바랍니다.
 
@@ -113,21 +113,21 @@ Figure 2는 `torch.fx`를 사용한 변환의 예시를 보여줍니다. 변환�
 
 `torch.fx`의 한 가지 목표는 딥러닝 모델이 생성하는 IR을 단순화하는 것입니다. 아래 Figure 5는 ResNet50을 예시로 TorchScript IR과 `torch.fx` IR의 차이를 보여줍니다. TorchScript IR과 비교했을 때, `torch.fx` IR은 확실히 더 단순하고 가독성도 더 좋습니다.
 
-![이미지](images/img_05.png)Figure 5
+![이미지](images/pytorch_fx_paper_reading/img_05.png)Figure 5
 
 post-quantization 및 quantization-aware training은 프로그램 추론 시의 성능을 끌어올릴 수 있다는 것을 우리는 알고 있습니다. 아래의 Figure 6은 `torch.fx` 기반으로 구현된 post-quantization(FBGEMM quantization operator 사용)을 DeepRecommender 모델에 적용한 후, Intel Xeon Gold 6138 CPU @2.00GHz에서의 성능을 보여줍니다. `torch.fx` 기반으로 구현된 post-quantization 모델의 추론 속도는 float 타입 모델 대비 3.3배 빠릅니다. 그리고 `torch.fx` 기반으로 quantization 작업을 구현하는 것은 TorchScript IR 기반보다 훨씬 간단합니다.
 
-![이미지](images/img_06.png)Figure 6
+![이미지](images/pytorch_fx_paper_reading/img_06.png)Figure 6
 
 `torch.fx`는 Op fusion도 할 수 있습니다. Figure 7은 `torch.fx` 기반으로 Conv+BN fusion을 한 후 ResNet50에 적용했을 때, NVIDIA Tesla V100-SXM2 16GB(CUDA version 11.0)와 Intel Xeon Gold 6138 CPU @ 2.00GHz에서의 성능을 보여줍니다. 보시는 것처럼 GPU에서는 약 6%의 latency 감소가 있고, CPU에서는 약 40%의 latency 감소(멀티스레드)와 약 18%의 latency 감소(싱글스레드)가 있습니다.
 
-![이미지](images/img_07.png)Figure 7
+![이미지](images/pytorch_fx_paper_reading/img_07.png)Figure 7
 
 이외에도 `torch.fx`는 FLOPs 계산, 메모리 대역폭 사용 분석, 워크로드의 데이터 값 크기 추정 등에 사용되어 프로그램 실행 시의 메모리와 속도를 분석할 수 있습니다. `torch.fx`는 또한 shape inference, 그리고 모델에 대응하는 DAG의 시각화 그리기 등에도 사용할 수 있습니다.
 
 마지막으로, `torch.fx`는 runtime 단계에서 ASIC 가속도 지원합니다(즉 `torch.fx`의 operator를 대응되는 ASIC으로 lowering). 아래 Figure 8은 `torch.fx` 기반으로 ResNet50과 LearningToPaint를 추론하면서 operator를 TensorRT로 lowering한 후의 가속 결과를 보여줍니다:
 
-![이미지](images/img_08.png)Figure 8
+![이미지](images/pytorch_fx_paper_reading/img_08.png)Figure 8
 
 # 0x8. 코멘트
 

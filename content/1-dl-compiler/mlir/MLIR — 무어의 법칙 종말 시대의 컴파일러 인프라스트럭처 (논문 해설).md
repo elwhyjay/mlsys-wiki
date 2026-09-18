@@ -23,7 +23,7 @@ MLIR 논문 링크: https://arxiv.org/pdf/2002.11054.pdf
 
 # 0x1. 제목
 
-![이미지](images/img_01.png)MLIR 논문 제목
+![이미지](images/mlir_moore_law_paper/img_01.png)MLIR 논문 제목
 
 논문의 제목은 **"MLIR: 무어의 법칙을 종결시키는 컴파일러 인프라스트럭처"** 로 번역됩니다. 제목에서 알 수 있듯이 MLIR은 컴파일러 아키텍처입니다. "무어의 법칙을 종결시킨다"는 표현은 다소 이해하기 어려울 수 있으므로 좀 더 자세히 살펴봐야 합니다. 또한 MLIR은 LLVM, Clang, Swift 프로젝트의 창시자인 Chris가 이끌고 있다는 점에서 프로젝트의 품질이 크게 보장됩니다. 이것이 바로 MLIR 컴파일러 아키텍처가 그토록 인기 있는 이유 중 하나일 것입니다.
 
@@ -62,11 +62,11 @@ MLIR 프로젝트의 목표는 이러한 프로그래밍 언어 설계 및 구�
 
 먼저 우리는 현대 머신러닝 프레임워크가 다양한 컴파일러, graph 기술 및 runtime 시스템으로 구성되어 있음을 인식했지만(Figure 1 참조), 이러한 부분들은 공통의 인프라스트럭처나 설계 관점을 공유하지 않으며, 일부는 최선의 컴파일러 설계 관행을 따르지 않습니다. 그 결과 사용자는 명확한 불편을 느끼게 되는데, 여기에는 미흡한 오류 메시지, 경계 사례에서의 버그, 예측 불가능한 성능, 새 하드웨어 지원의 어려움 등이 포함됩니다.
 
-![이미지](images/img_02.png)Figure1
+![이미지](images/mlir_moore_law_paper/img_02.png)Figure1
 
 우리는 곧 컴파일러 산업 전체에 유사한 문제가 존재한다는 사실을 깨달았습니다. 즉, LLVM과 같은 기존 컴파일 시스템은 다언어 구현의 통합 및 통합에서는 매우 성공적이지만, 현대의 고수준 언어들은 결국 자체적인 high-level IR을 구축하고 동일한 고수준 abstraction 기술을 반복적으로 재발명하는 경향이 있습니다(Figure 2 참조). 동시에 LLVM 커뮤니티에서는 병렬 구조를 어떻게 표현하는 것이 최선인지, C 호출 규약이나 OpenMP 같은 cross-language 기능을 위한 일반적인 frontend lowering 인프라스트럭처 구현을 어떻게 공유할지 등과 같은 논쟁이 자주 등장했지만, 만족스러운 해결책에 이르지 못했습니다.
 
-![이미지](images/img_03.png)Figure2
+![이미지](images/mlir_moore_law_paper/img_03.png)Figure2
 
 이러한 과제를 마주하며, 우리는 N개의 개선된 컴파일러를 구현할 작업량을 감당할 수 없다고 판단했고, 따라서 더 범용적인 솔루션을 구축할 필요가 있었습니다. 우리는 고품질의 인프라스트럭처를 개발하는 데 노력을 투자할 수 있었으며, 이는 여러 분야에 도움을 주고 기존 시스템을 점진적으로 업그레이드할 수 있게 하며, 전용 가속기의 이기종 컴파일과 같은 당면한 시급한 문제를 더 쉽게 해결할 수 있게 합니다. 이제 우리는 MLIR 기반 시스템을 구축하고 배포한 풍부한 경험을 축적했으므로, MLIR 인프라스트럭처의 원칙과 설계를 되돌아보고 왜 이 방향으로 발전했는지 논의할 수 있습니다.
 
@@ -136,7 +136,7 @@ MLIR에서의 의미 단위는 "operation"이며, Op라고 부릅니다. MLIR �
 
 Op(Figure 3 참조)는 고유한 opcode를 가집니다. 문자 그대로 opcode는 그것이 속한 Dialect와 op를 식별하는 문자열입니다. Op는 0개 이상의 value를 operand와 result로 가질 수 있으며, SSA 형식으로 operand와 result를 유지합니다. 모든 value는 LLVM IR과 유사하게 type을 가집니다. opcode, operand, result 외에도 Op는 attribute, region, block argument, 위치 정보(**"Attributes, Regions, Block Arguments, and Location Information"**)를 가질 수 있습니다. Figure 4는 value와 Op를 보여주며, `%` 식별자는 named value(번들)이며, 번들에 여러 value가 있을 경우 `:` 뒤에 번들 안의 value 개수를 명시합니다(주: Figure 3의 `%results:2`처럼 result가 2개임을 의미). 그리고 "#"은 특정 value를 나타냅니다. 일반적인 텍스트 표현 형식에서 op 이름은 따옴표로 둘러싸인 문자열이며, 그 뒤에 괄호로 둘러싸인 operand가 옵니다.
 
-![이미지](images/img_04.png)Figure3![이미지](images/img_05.png)Figure4
+![이미지](images/mlir_moore_law_paper/img_04.png)Figure3![이미지](images/mlir_moore_law_paper/img_05.png)Figure4
 
 ### Attributes(속성)
 
@@ -227,7 +227,7 @@ MLIR은 ODS에서 TableGen Op 클래스를 사용하여 Op를 모델링합니다
 
 type constraint는 인수/result type의 속성을 검사하며, 사용자/Dialect에 의해 확장됩니다. MLIR 인프라스트럭처는 또한 "any type", "tensor with element satisfying the given constraint", "vector of given rank" 등 많은 사전 정의된 type constraint를 제공합니다. ODS는 trait이 가져온 constraint를 사용하는 operand의 result type을 자동으로 추론하는 데 제한적인 지원을 제공합니다. 자세한 내용은 다음 절(논문 4.2절에 해당)을 참조하십시오.
 
-![이미지](images/img_06.png)Op의 ODS 정의
+![이미지](images/mlir_moore_law_paper/img_06.png)Op의 ODS 정의
 
 ### 0x6.3.2 Declarative rewrites(선언적 rewrite)
 
@@ -235,7 +235,7 @@ type constraint는 인수/result type의 속성을 검사하며, 사용자/Diale
 
 ODS와 마찬가지로 DRR은 TableGen 언어에 임베딩된 DSL입니다. DRR은 source와 target DAG pattern 및 constraint(동적 constraint 포함[49])를 표현하며 pattern 우선순위 기반의 이점을 활용합니다. pattern은 Op의 인수를 캡처하고 재사용할 수 있습니다. 개념적으로 DRR은 특정 constraint 하에서의 DAG의 동등성을 표현합니다. Figure 6은 DRR pattern의 예시를 보여주며, Figure 5에 정의된 Op를 `compare`와 `select`로 구성된 일반적인 저수준 구현으로 변환합니다.
 
-![이미지](images/img_07.png)DRR graph rewrite 규칙
+![이미지](images/mlir_moore_law_paper/img_07.png)DRR graph rewrite 규칙
 
 DRR은 C++ 코드로 변환되며, 일반 graph rewrite 프레임워크를 사용해 C++로 직접 정의된 더 복잡한 pattern과 혼합할 수 있습니다. 이 기능을 통해 MLIR은 흔한 사용 사례를 간결하게 유지하면서도 프레임워크의 일반성을 제한하지 않습니다.
 
@@ -251,7 +251,7 @@ MLIR Pass Manager는 다양한 입자도로 IR Pass 시퀀스를 조직하고 �
 
 MLIR의 IR과 op는 메모리 내 IR 표현을 완전히 반영할 수 있는 텍스트 표현 형식을 가지며, 이는 디버깅, transformation 동안의 IR 이해, 테스트 케이스 작성에 매우 중요합니다. Figure 4에서 보여진 원시 IR 표현은 길고 이해하기 어렵습니다. 따라서 MLIR은 사용자가 Op의 커스텀 printing 및 parsing 형식을 정의할 수 있도록 허용합니다. 이를 통해 예시는 Figure 8과 같이 출력 및 parsing될 수 있어 사용이 더 쉬워집니다. 두 형식은 완전히 상호 변환 가능하며, 텍스트 형식을 입력과 출력으로 사용해 각 컴파일러 Pass를 개별 테스트할 수 있습니다. 숨겨진 상태가 없기 때문에 단일 Pass 실행 결과는 전체 Pass pipeline에서 같은 Pass를 실행한 결과와 동일합니다. 이러한 접근 방식은 IR 형식을 수동으로 작성할 수 있고 IR 변환을 추적하기에 편리하므로 사용자 친화적입니다.
 
-![이미지](images/img_08.png)커스텀 parsing 형식의 Affine Dialect IR
+![이미지](images/mlir_moore_law_paper/img_08.png)커스텀 parsing 형식의 Affine Dialect IR
 
 ### 0x6.4.5 문서화
 
@@ -275,7 +275,7 @@ TensorFlow[1]는 이러한 프레임워크의 한 예입니다. TensorFlow의 �
 
 TensorFlow는 MLIR을 사용하여 이 내부 표현을 모델링하고, Figure 1에 표시된 사용 사례에 대해 변환을 수행합니다. 이는 단순한 대수 optimization을 (하드웨어 가속기) 데이터 센터 클러스터에서 병렬로 실행 가능한 새로운 형태의 graph로 변환하고, IR을 XLA[57]와 같은 도구를 사용해 효율적인 native 코드를 생성할 수 있고 모바일 배포에 적합한 표현으로 lowering합니다. MLIR에서의 TensorFlow Graph 표현은 그림 7과 같습니다.
 
-![이미지](images/img_09.png)TensorFlow Graph에 대응하는 MLIR 표현
+![이미지](images/mlir_moore_law_paper/img_09.png)TensorFlow Graph에 대응하는 MLIR 표현
 
 ### 0x6.5.2 Polyhedral code generation 다면체 코드 생성
 
@@ -324,7 +324,7 @@ constant folding은 매우 중요한 기능이지만, 더 흥미로운 hook은 `
 
 이러한 속성을 알기 위해 Inliner Pass는 Figure 10의 interface를 정의합니다. 각 op와 Dialect는 op와 Dialect에 그 interface 구현을 MLIR에 등록할 수 있으며, 일반 Inliner Pass에서 이익을 얻을 수 있습니다. op나 Dialect가 interface를 제공하지 않으면, 해당 optimization Pass는 그 op를 보수적으로 다룰 것입니다. 이러한 설계는 Dialect 개발자가 빠르게 Dialect 개발과 실행을 시작할 수 있게 합니다. 시간이 지나면서 interface 개발에 더 많은 노력을 투입함으로써 시스템에서 더 많은 이익을 얻을 수 있습니다.
 
-![이미지](images/img_10.png)inline Pass interface
+![이미지](images/mlir_moore_law_paper/img_10.png)inline Pass interface
 
 optimization interface는 또한 핵심 컴파일러에 모듈화 이점을 제공합니다. Dialect 특화 로직이 핵심 transformation이 아닌 Dialect 자체 내부에서 구현되기 때문입니다.
 
@@ -362,7 +362,7 @@ MLIR은 개발자가 거의 임의의 abstraction을 정의할 수 있게 하지
 
 이상이 MLIR 논문의 대략적인 내용입니다. MLIR 논문에서 언급된 컴포넌트를 마인드맵으로 그려보면 대략 다음과 같습니다.
 
-![이미지](images/img_11.png)Dialect의 구성 요소
+![이미지](images/mlir_moore_law_paper/img_11.png)Dialect의 구성 요소
 
 아래에서는 OneFlow Dialect를 예시로 이 그림을 설명하겠습니다.
 

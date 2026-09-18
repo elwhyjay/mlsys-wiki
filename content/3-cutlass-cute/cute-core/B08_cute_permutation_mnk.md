@@ -16,7 +16,7 @@ Ampere-style fp16 mma를 예로, 한 warp이 `16x8x16` mma를 2회 수행해 `16
 
 그러나 [tiled mma 글](../B04_cute_tiled_mma/README.md)에서 다뤘듯, mma 명령이 **thread가 보유하는 연속 value를 최대 2개**로 제한합니다(그림 1). float 값이라면 사용 가능한 최대 STG는 **STG.64**에 그칩니다.
 
-![Figure 1. 16x8x16 FP16 mma 명령 C 행렬의 thread-value 매핑. 각 thread가 C의 특정 위치 데이터를 얻음](images/v2-c7ed6863853970d9462dc6f104251b60_1440w.jpg)
+![Figure 1. 16x8x16 FP16 mma 명령 C 행렬의 thread-value 매핑. 각 thread가 C의 특정 위치 데이터를 얻음](images/B08_cute_permutation_mnk/v2-c7ed6863853970d9462dc6f104251b60_1440w.jpg)
 
 이럴 때 **thread 0이 C에서 연속된 4개 value를 얻을 수 있다면** 이상적입니다. 이것이 permutationMNK 제안의 동기. 유사 상황: **w4a8 혼합 정밀도 GEMM**, **fp8 attention**(QK 곱 결과 P가 fp8 mma의 입력이 되려면 4개 값이 연속이어야 함) 등.
 
@@ -32,13 +32,13 @@ TiledMMA tiled_mma = make_tiled_mma(SM80_8x8x4_F64F64F64F64_TN{},
 
 mma 실행 과정과 thread의 C 레지스터 데이터 배치는 그림 2:
 
-![Figure 2. 일반 mma 2회 호출. thread 0이 얻는 C 좌표 {(0, 0), (0, 1), (0, 8), (0, 9)} — 연속 데이터로 write 불가](images/img_001.jpg)
+![Figure 2. 일반 mma 2회 호출. thread 0이 얻는 C 좌표 {(0, 0), (0, 1), (0, 8), (0, 9)} — 연속 데이터로 write 불가](images/B08_cute_permutation_mnk/img_001.jpg)
 
 예상대로 각 thread 데이터는 write 시 불연속. 이유는 **mma 표준 방식**을 따라 B를 연속 읽고 두 mma를 연속 실행했기 때문.
 
 그러나 **두 mma 명령이 A·B 행렬의 물리적으로 연속된 블록을 처리하지 않고 교차(interleaved) 방식으로 데이터를 취하고, 계산 결과도 교차하여 C에 쓴다면**, 그리고 두 번째 mma가 여전히 교차 위치를 읽고 결과도 교차 위치에 쓴다면 — 그림 3:
 
-![Figure 3. 교차 mma 2회 호출. thread 0이 얻는 C 좌표 {(0, 0), (0, 1), (0, 2), (0, 3)} — 연속 데이터로 write 가능](images/img_002.jpg)
+![Figure 3. 교차 mma 2회 호출. thread 0이 얻는 C 좌표 {(0, 0), (0, 1), (0, 2), (0, 3)} — 연속 데이터로 write 가능](images/B08_cute_permutation_mnk/img_002.jpg)
 
 이렇게 계산된 C는 **각 thread가 연속된 4개 값을 가져 STG.128 실행 가능**! 대응하는 permutationMNK 파라미터는 **N 차원에서 재배열**을 수행:
 

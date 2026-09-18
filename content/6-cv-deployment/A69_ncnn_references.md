@@ -4,7 +4,7 @@
 
 ## NCNN 참고 자료
 
-![NCNN](images/img_001.jpg)
+![NCNN](images/A69_ncnn_references/img_001.jpg)
 
 최근 TNN, MNN, NCNN, ONNXRuntime 사용 기록을 정리하고 있다. 나중에 같은 문제를 다시 만났을 때 빨리 확인하기 위한 자료 모음이다. 관련 C++ 추론 예제는 `Lite.AI.ToolKit`에 있다.
 
