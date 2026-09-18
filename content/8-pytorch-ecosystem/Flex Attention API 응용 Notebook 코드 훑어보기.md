@@ -1,33 +1,33 @@
-> FlexAttention의 자주 쓰는 API 사용법을 해설한다. 블로그 출처: https://github.com/pytorch-labs/attention-gym/blob/main/examples/flex_attn.ipynb . 이 글에서는 일부 코드에 설명을 추가하고, 코드의 몇 가지 bug를 수정했으며, PyTorch nightly 버전으로 예제를 실행해 각 custom attention의 출력을 얻었다. 출력은 아래 각 예제 코드 뒤에 표시했다. 마지막에는 torch compile inductor backend에서 FlexAttention을 구현하는 진입점 코드도 훑어본다.
+> FlexAttention의 자주 쓰이는 API 사용 방법을 해설한다. 블로그 출처: https://github.com/pytorch-labs/attention-gym/blob/main/examples/flex_attn.ipynb , 이 글을 바탕으로 일부 코드에 설명을 덧붙이고 코드에 있던 몇 가지 bug를 수정했으며, PyTorch nightly 버전으로 예제를 실행해 각 custom attention의 출력을 얻어 아래 각 예제 코드 뒤에 실었다. 마지막으로 torch compile inductor 백엔드에서 FlexAttention을 구현하는 진입점 코드를 훑어보는 내용도 보충했다.
 
-# FlexAttention API 사용 Notebook
+# FlexAttention API 사용 NoteBook
 
-이 notebook은 새로운 FlexAttention API의 사용 방법을 보여준다. 이 API를 사용하면 scaled dot product attention(SDPA)에서 계산되는 attention score에 대해 사용자가 직접 수정 함수를 지정할 수 있다.
+이 노트북은 새로운 FlexAttention API의 사용 방법을 보여준다. 이 API는 scaled dot product attention(SDPA)에서 계산되는 attention score에 대한 수정을 사용자가 직접 지정할 수 있게 해준다.
 
 ## 목차
 
-1. [소개](#소개)
-2. [설정](#설정)
-3. [기본 사용법](#기본-사용법)
-4. [score 수정 vs score mask](#score-수정-vs-score-mask)
-5. [score 수정 예제](#score-수정-예제)
-   - [전체 attention](#전체-attention)
-   - [표준 causal mask](#표준-causal-mask)
-   - [sliding window attention](#sliding-window-attention)
-   - [Prefix LM](#prefix-lm-bidirectional-causal)
-   - [document mask](#document-mask)
-   - [NATTEN mask](#natten-masking)
+1. [소개](#介绍)
+2. [설정](#设置)
+3. [기본 사용법](#基本用法)
+4. [score 수정 vs score 마스킹](#分数修改vs分数掩码)
+5. [score 수정 예제](#分数修改示例)
+   - [Full Attention(no-op)](#全注意力)
+   - [표준 causal 마스크](#标准因果掩码)
+   - [Sliding Window Attention](#滑动窗口注意力)
+   - [Prefix LM(양방향 + causal)](#prefix-lm-bidirectional-causal)
+   - [문서 마스킹](#文档掩码)
+   - [NATTEN 마스킹](#natten-masking)
    - [Alibi bias](#alibi-bias)
-   - [Tanh soft capping](#tanh-soft-capping)
-   - [nested jagged tensor](#nested-jagged-tensor)
-   - [Flamingo cross attention](#flamingo-cross-attention)
+   - [Tanh soft-capping](#tanh-soft-capping)
+   - [Nested Jagged Tensor](#nested-jagged-tensor)
+   - [Flamingo Cross Attention](#flamingo-cross-attention)
 
 ## 소개
 
-FlexAttention API 관련 내용사용관련 내용에서Fused Scaled Dot Product Attention Kernel중관련 내용대해attentionscore의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)모드와bias가능관련 내용높은관련 내용구현，그리고관련 내용있다관련 내용에서의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (API)할 것이다관련 내용사용관련 내용의관련 내용생성한다융합의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)
+FlexAttention API는 Fused Scaled Dot Product Attention Kernel 안에서 attention score에 대한 커스텀 수정을 지정할 수 있게 해준다. 이를 통해 다양한 attention 패턴과 bias를 효율적으로 구현할 수 있고, 실행 시간과 메모리를 절약할 여지도 생긴다. 또한 API는 사용자가 정의한 수정에 맞춰 융합된 backward kernel도 생성해 준다.
 
-## 관련 내용
-먼저，관련 내용우리는필요한 라이브러리를 import그리고관련 내용우리는의관련 내용
+## 설정
+먼저 필요한 라이브러리를 import하고 환경을 설정하자.
 
 ```python
 import random
@@ -62,30 +62,30 @@ data_type = torch.float16
 print(f"Using the default sparsity block size: {_DEFAULT_SPARSE_BLOCK_SIZE}")
 ```
 
-우리는할 것이다관련 내용있다사용의테스트관련 내용이들관련 내용할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score_mod)함수와mask_fn의block관련 내용
+score_mod 함수와 mask_fn의 블록 희소성 표현을 출력해 주는 유용한 테스트 유틸리티를 몇 가지 정의한다.
 
-관련 내용할 것이다관련 내용로하관련 내용구현의성능：
+또한 다음 몇 가지 구현의 성능을 비교한다:
 
 - FlexAttention
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FlashAttentionV2)의SOTA구현，관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
-- `nn.F.scaled_dot_product_attention` + 완전히 materialize된의attn_mask。관련 내용할 것이다dispatch까지관련 내용개융합구현`EFFICIENT_ATTENTION`，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
+- causal 마스크를 적용한 FlashAttentionV2의 SOTA 구현.
+- `nn.F.scaled_dot_product_attention` + 완전히 구체화된 attn_mask. 이 경우 임의의 마스크를 허용하는 융합 구현 `EFFICIENT_ATTENTION`으로 dispatch된다.
 
 ```python
 @lru_cache
 def create_block_mask_cached(score_mod, B, H, M, N, device="cuda"):
     """
-    생성한다그리고cacheblockmask。
+    블록 마스크를 생성하고 캐싱한다.
     
     파라미터:
-    - score_mod: score관련 내용함수
-    - B: batch크기
-    - H: 관련 내용
-    - M: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)
-    - N: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)
-    - device: 관련 내용
+    - score_mod: score 수정 함수
+    - B: 배치 크기
+    - H: head 수
+    - M: query 시퀀스 길이
+    - N: key/value 시퀀스 길이
+    - device: 디바이스 종류
     
-    반환한다:
-    - block_mask: 생성한다의blockmask
+    반환:
+    - block_mask: 생성된 블록 마스크
     """
     block_mask = create_block_mask(score_mod, B, H, M, N, device=device)
     return block_mask
@@ -93,15 +93,15 @@ def create_block_mask_cached(score_mod, B, H, M, N, device="cuda"):
 
 def calculate_tflops(flops: float, time_ms: float, multiplier: int) -> float:
     """
-    계산TFLOPS。
+    TFLOPS를 계산한다.
     
     파라미터:
-    - flops: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-    - time_ms: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-    - multiplier: 관련 내용
+    - flops: 부동소수점 연산 횟수
+    - time_ms: 시간(밀리초)
+    - multiplier: 승수
     
-    반환한다:
-    - TFLOPS관련 내용
+    반환:
+    - TFLOPS 값
     """
     return multiplier * flops * (1e3 / time_ms) / 1e12
 
@@ -117,23 +117,23 @@ def test_mask(
     print_mask=True,
 ):
     """
-    테스트mask관련 내용가능。
+    마스크 기능을 테스트한다.
     
     파라미터:
-    - score_mod: score관련 내용함수
-    - mask_mod: mask관련 내용함수
-    - B: batch크기
-    - H: 관련 내용
-    - S: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)
-    - D: 관련 내용차원
-    - skip_correctness: 여부이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-    - print_mask: 여부이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
+    - score_mod: score 수정 함수
+    - mask_mod: 마스크 수정 함수
+    - B: 배치 크기
+    - H: head 수
+    - S: 시퀀스 길이
+    - D: 임베딩 차원
+    - skip_correctness: 정확성 검사를 건너뛸지 여부
+    - print_mask: 마스크를 출력할지 여부
     """
     assert (
         score_mod is not None or mask_mod is not None
     ), "Must provide a score_mod or mask_mod"
     
-    # 생성한다입력텐서
+    # 입력 텐서 생성
     query = torch.randn(
         B, H, S, D, device="cuda", dtype=torch.float16, requires_grad=True
     )
@@ -145,17 +145,17 @@ def test_mask(
     )
     gradOut = torch.randn(B, H, S, D, device="cuda", dtype=torch.float16)
 
-    # 생성한다blockmask
+    # 블록 마스크 생성
     if mask_mod is not None:
         block_mask = create_block_mask_cached(mask_mod, 1, 1, S, S, device=query.device)
     else:
         block_mask = None
     
-    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)함수
+    # 마스크 함수 결정
     sdpa_mask_fn = mask_mod if mask_mod is not None else score_mod
     mask = create_mask(sdpa_mask_fn, 1, 1, S, S, device=query.device)
 
-    # 관련 내용아니관련 내용의attention계산함수
+    # 서로 다른 attention 계산 함수 정의
     causal_fa2 = lambda: F.scaled_dot_product_attention(
         query, key, value, is_causal=True
     )
@@ -168,22 +168,22 @@ def test_mask(
 
     results = []
     
-    # 계산관련 내용
+    # 밀도 계산
     if block_mask is not None:
         density = (100 - block_mask.sparsity()) / 100
     else:
         density = 1.0
     
-    # 계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 부동소수점 연산 횟수 계산
     causal_fav2_flops = 0.5 * B * H * D * S * S
     flops = density * B * H * D * S * S
 
-    # 전이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 순전파 시간
     causal_fa2_time = do_bench(causal_fa2)
     xformers_mask_time = do_bench(xformers_mask)
     flex_ms = do_bench(flex_attention_call)
 
-    # 후이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 역전파 시간
     causal_fa2_out = causal_fa2()
     xformers_out = xformers_mask()
     flex_out = flex_attention_call()
@@ -196,7 +196,7 @@ def test_mask(
     )
     flex_bw_ms = do_bench(lambda: flex_out.backward(gradOut, retain_graph=True))
 
-    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 정확성 검사
     if not skip_correctness:
         xformers_outs = []
         flex_outs = []
@@ -223,7 +223,7 @@ def test_mask(
 
         print("Correctness check passed ✅")
     
-    # 결과관련 내용
+    # 결과 포매팅
     results = [
         [
             "causal FA2",
@@ -266,16 +266,16 @@ def test_mask(
     if print_mask:
         print(f"\nBlock Mask:\n{block_mask}")
 
-    # 관련 내용
+    # 메모리 정리
     del query, key, value, gradOut, causal_fa2_out, xformers_out, flex_out
     torch.cuda.empty_cache()
 ```
 
-> 여기의multiplier로관련 내용이다4와10관련 내용
+> 여기서 multiplier가 왜 4와 10인지는 명확히 파악하지 못했다.
 
-## 관련 내용사용관련 내용
+## 기본 사용법
 
-로하이다관련 내용사용FlexAttention API의관련 내용예제：
+다음은 FlexAttention API를 사용하는 기본 예제이다:
 
 ```python
 
@@ -301,9 +301,9 @@ out_compiled = compiled_flex_attention(query, key, value, score_mod=checkerboard
 torch.testing.assert_close(output, out_compiled, atol=2e-2, rtol=2e-2)
 ```
 
-## score이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vsscoremask)
+## score 수정 vs score 마스킹
 
-우리는할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다개핵심관련 내용이들관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FlexAttention)의관련 내용큰성능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (flex_attention)의완전한API관련 내용하：
+잠시 주제에서 벗어나 두 가지 핵심 개념을 설명한다. 이 개념들은 FlexAttention의 성능 이점을 최대로 끌어내는 방법을 이해하는 데 매우 중요하다. flex_attention의 전체 API는 다음과 같다:
 
 ```python
 flex_attention(
@@ -316,42 +316,42 @@ flex_attention(
 )
 ```
 
-사용자는가능가능된다좋은관련 내용로관련 내용우리는이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용 `score_mod` 와 `block_mask`。
+왜 `score_mod`와 `block_mask`를 둘 다 써야 하는지 궁금할 수 있다.
 
-- 관련 내용사용자는관련 내용에서attentionweightmatrix중이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)사용 `score_mod` 함수。
-- 관련 내용사용자는관련 내용에서attentionweightmatrix중maskscore이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용 `mask_mod` 함수，이들score관련 내용독립이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)
+- attention 가중치 행렬에서 score 값을 수정하고 싶을 때는 `score_mod` 함수를 사용해야 한다.
+- attention 가중치 행렬에서 score 값을 마스킹하고 싶을 때는 `mask_mod` 함수를 사용해야 한다. 이때 마스킹 여부는 score 값 자체와는 무관하며 위치 정보에만 의존한다.
 
-주의：관련 내용`block_mask` 도가능로사용 `score_mod` 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)의성능할 것이다아니이다관련 내용의。
+주의: 어떤 `block_mask`든 `score_mod`로 표현할 수 있지만, 그렇게 하면 kernel 성능이 최적이 되지 않는다.
 
-### 관련 내용우리는통해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)와서관련 내용차이관련 내용
+### causal attention을 통해 차이를 살펴보자.
 
-관련 내용사용score_mod의구현：
+score_mod를 사용한 구현:
 
 ```python
 def causal_bias(score, b, h, q_idx, kv_idx):
     return torch.where(q_idx >= kv_idx, score, -float("inf"))
 ```
-각관련 내용사용자는관련 내용쓰기관련 내용개 `score_mod` 함수，관련 내용함수대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다원본score，관련 내용대해관련 내용로 설정 -inf 관련 내용사용자는관련 내용가능가능관련 내용사용 `mask_mod`。
+어떤 원소에는 원래 score를 그대로 넘기고 다른 원소에는 -inf를 설정하는 `score_mod` 함수를 작성하고 있다면, 아마도 `mask_mod`를 사용하는 편이 맞다.
 
-관련 내용사용 `mask_mod` 의구현：
+`mask_mod`를 사용한 구현:
 
 ```python
 def casual_mask(b,h,q_idx, kv_idx):
     return q_idx >= kv_idx
 ```
 
-관련 내용사용자는이 부분은 원문의 해당 기술 설명을 이어서 서술한다보다관련 내용와서관련 내용모두반환한다관련 내용텐서。핵심의관련 내용에서관련 내용
+보다시피 둘은 매우 비슷해 보이며, 모두 스칼라 텐서를 반환한다. 핵심적인 차이는 다음과 같다:
 
-- `mask_mods` 반환한다관련 내용텐서，여기서 `True` 관련 내용계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)`False` 관련 내용우리는이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask score)
-- `mask_mods` 아니관련 내용`score` 파라미터，왜냐하면관련 내용에서계산관련 내용중아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+- `mask_mods`는 불리언 텐서를 반환한다. `True`는 해당 score를 계산해야 한다는 뜻이고, `False`는 해당 score를 마스킹하겠다는 뜻이다.
+- `mask_mods`는 `score` 인자를 받지 않는다. 계산 과정에서 실제 값에 의존하는 것이 허용되지 않기 때문이다.
 
-### 관련 내용필자는관련 내용사용 score_mod 와 mask_mod 관련 내용된다관련 내용
+### score_mod와 mask_mod를 동시에 사용하면 어떻게 되는가?
 
-score_mod 함수할 것이다응용관련 내용각개이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)의관련 내용
+score_mod 함수는 마스킹되지 않은 모든 원소에 적용된다.
 
-### 필자는있다관련 내용개 mask mod 함수，관련 내용생성한다관련 내용개 BlockMask？
+### mask mod 함수가 있는데 BlockMask는 어떻게 만드는가?
 
-관련 내용좋은，읽다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (flex_attention)우리는관련 내용개주요의 API。
+좋은 질문이다, 독자여! flex_attention 외에 우리는 주요 API를 하나 더 제공한다.
 
 ```python
 create_block_mask(
@@ -367,31 +367,31 @@ create_block_mask(
 )
 ```
 
-따라서，대해관련 내용상관련 내용예제，호출한다flex_attention의관련 내용성능관련 내용이다：
+따라서 위 예제에서 flex_attention을 호출하는 가장 성능이 좋은 방식은 다음과 같다:
 
 ```python
 causal_block_mask = create_block_mask(causal_mask, B, H, M, N)
 flex_attention(query, key, value, block_mask = causal_block_mask)
 ```
 
-B,H,Q_LEN,KV_LEN 관련 내용이다 batch_size、num_heads、query_sequence_length 와 key_sequence_length。
+B, H, Q_LEN, KV_LEN은 각각 batch_size, num_heads, query_sequence_length, key_sequence_length이다.
 
-### 로관련 내용모두있다？
+### 왜 둘 다 있는가?
 
-관련 내용이다위해성능。이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)상관련 내용만있다attentionscore의하관련 내용부분이다관련 내용의。만약아니생성한다BlockMask，우리는할 것이다관련 내용하다관련 내용의관련 내용아래우리는할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다구현의성능차이관련 내용
+순전히 성능 때문이다. causal 마스크는 실제로 매우 희소하다. attention score의 하삼각 부분만 의미가 있다. BlockMask를 생성하지 않으면 두 배의 작업을 해야 한다! 아래에서 두 구현의 성능 차이를 비교한다.
 
-## score관련 내용예제
-관련 내용우리는관련 내용가능로관련 내용사용FlexAttention API의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)예제。
+## score 수정 예제
+FlexAttention API로 구현할 수 있는 다양한 score 수정 예제를 살펴보자.
 
-관련 내용우리는할 것이다관련 내용이들score_mod + mask_fns의이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+범례: 이 score_mod + mask_fns들의 희소성 표현을 출력한다.
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)상아니관련 내용계산관련 내용의attention출력
-- ██ 이block계산관련 내용있다관련 내용와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (token)의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)
-- ░░ 이block부분mask，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (token token mask)로-inf
+블록이 빠져 있다는 것은 그 블록이 완전히 마스킹되었다는 뜻이며, 실제로 최종 attention 출력을 계산할 때 계산할 필요가 없다
+- ██ 이 블록은 모든 query token과 key token 사이의 완전한 attention을 계산한다
+- ░░ 이 블록은 부분적으로 마스킹되어, 일부 query token은 일부 key token에 attend하지만 일부는 -inf로 마스킹된다
 
-### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)
+### Full Attention
 
-응용관련 내용개“없음관련 내용의score이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attentionscore)아니관련 내용
+'no-op' score 수정을 적용한다. attention score를 그대로 유지한다.
 
 ```python
 def noop(score, b, h, q_idx, kv_idx):
@@ -400,7 +400,7 @@ def noop(score, b, h, q_idx, kv_idx):
 test_mask(noop, print_mask=True)
 ```
 
-실행한다후의출력로：
+실행 후의 출력은 다음과 같다:
 
 ```python
 Results for noop:
@@ -418,11 +418,11 @@ Block Mask:
 None
 ```
 
-### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
+### 표준 causal 마스크
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다모델중의핵심관련 내용보장각개token만가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)중관련 내용및관련 내용이전에는의token。block이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)의하관련 내용
+표준 causal 마스크는 autoregressive 언어 모델의 핵심 기법으로, 각 token이 시퀀스에서 자기 자신과 그 앞의 token에만 attend하도록 보장한다. 블록 희소성 표현은 이 마스크의 하삼각 성질을 잘 보여준다.
 
-있다관련 내용이들구현의더많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다위의《score이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vsscoremask)
+이 구현들에 대한 더 자세한 내용은 위의 「score 수정 vs score 마스킹」을 참고하라
 
 ```python
 def causal_bias(score, b, h, q_idx, kv_idx):
@@ -438,11 +438,11 @@ test_mask(mask_mod=causal_mask)
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/001.png)
 
-### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)
+### Sliding Window Attention
 
-Mistral 관련 내용중있다관련 내용개관련 내용좋은의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (bias)상，사용자는관련 내용개관련 내용크기의“관련 내용에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다중，사용자는만관련 내용`torch.abs(q_tokens - kv_tokens) < SLIDING_WINDOW` 의 token 이 부분은 원문의 해당 기술 설명을 이어서 서술한다도된다와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)사용。우리는할 것이다통해관련 내용개관련 내용좋은의모드와서구현이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask mask)가능로관련 내용상관련 내용로관련 내용개부분，그다음관련 내용에서관련 내용
+Mistral 논문에는 이 bias를 아주 잘 설명해 주는 그림이 하나 있다. 본질적으로는 고정 크기의 '슬라이딩 윈도우'를 정의하고, autoregressive 디코딩에서 `torch.abs(q_tokens - kv_tokens) < SLIDING_WINDOW`를 만족하는 token끼리만 서로 attend하도록 허용하는 것이다. 보통 이것은 causal attention과 결합해서 사용된다. 여기서는 마스크 조합이라는 좋은 패턴을 통해 이를 구현한다. 일반적으로 마스크는 개념적으로 몇 개의 부분으로 나눈 다음 다시 조합할 수 있다.
 
-여기서는 mask 함수 두 개를 작성한다. 하나는 `causal mask`를 적용하고, 다른 하나는 `window attention`을 적용한다. 그런 다음 두 mask 함수를 조합해 최종 mask를 만든다. 앞에서처럼 mask 함수가 `True`를 반환하는 위치만 attention 계산에 참여한다.
+마스크 함수를 두 개 작성한다. 하나는 `causal 마스크`를 수행하고 다른 하나는 `윈도우 attention`을 수행하며, 이 둘을 조합해 최종 마스크 함수를 만든다. 앞서 살펴본 것처럼 마스크 함수는 불리언 값을 반환하며, `True`는 해당 원소가 attention 계산에 참여해야 함을 의미한다.
 
 ```python
 SLIDING_WINDOW = 1024
@@ -461,9 +461,9 @@ test_mask(mask_mod=sliding_window_causal_mask)
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/002.png)
 
-### 전이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (LM +)
+### Prefix LM(양방향 + causal)
 
-T5(https://paperswithcode.com/method/t5)는 prefix attention을 사용한다. 여기서는 일정 개수의 `prefix` token이 서로 양방향으로 attention하고, 이후 token은 causal attention을 수행한다. 다시 mask 함수 하나를 작성해 이 동작을 구현하며, 기본 구조는 앞의 causal mask와 비슷하다.
+T5 아키텍처 논문(https://paperswithcode.com/method/t5)은 prefix attention을 수행하는 attention 변형을 설명한다. 여기서는 일정 개수의 `prefix` token이 완전히 참여할 수 있고, 그 뒤의 모든 token은 causal attention을 수행한다. 이번에도 마스크 함수 두 개를 조합해 이를 구현하는데, 하나는 causal 마스크용이고 다른 하나는 prefix 길이에 기반한다.
 
 ```python
 PREFIX_LENGTH = 2048
@@ -478,18 +478,18 @@ test_mask(mask_mod=prefix_lm_causal_mask)
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/003.png)
 
-### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
+### 문서 마스킹
 
-관련 내용하，우리는있다많은개아니관련 내용의관련 내용우리는이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)의attention，이 부분은 원문의 해당 기술 설명을 이어서 서술한다의token관련 내용의attention。우리는가능로통해관련 내용사용관련 내용개document_id텐서와서구현이 부분은 원문의 해당 기술 설명을 이어서 서술한다텐서관련 내용각개token관련 내용의관련 내용그다음，우리는가능로mask관련 내용있다document_id[q_idx]와document_id[kv_idx]아니관련 내용의attentionscore。
+길이가 서로 다른 문서가 여러 개 있다고 상상해 보자. 문서 사이의 attention은 마스킹하고 같은 문서 안의 token 사이 attention만 허용하고자 한다. 각 token이 어느 문서에 속하는지 알려 주는 document_id 텐서를 사용하면 이를 구현할 수 있다. 그다음 document_id[q_idx]와 document_id[kv_idx]가 서로 다른 모든 attention score를 마스킹하면 된다.
 
-주의：만있다관련 내용`score_mod`관련 내용우리는관련 내용컴파일관련 내용개새의kernel（관련 내용된다관련 내용사용torch.compile이 부분은 원문의 해당 기술 설명을 이어서 서술한다까지관련 내용이예제코드이다통해cacheBlockMask구현의，관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (BlockMask)아니관련 내용새컴파일。도관련 내용이다관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)우리는만관련 내용에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다계산관련 내용개새의BlockMask，관련 내용아니이다관련 내용개새의kernel。
+주의: 새로운 kernel을 컴파일해야 하는 경우는 `score_mod`가 바뀔 때뿐이다(torch.compile 인프라가 이를 자동으로 감지한다). 이 예제 코드는 BlockMask를 캐싱하는 방식으로 구현되어 있지만, 일반적으로 BlockMask를 바꾸는 데에는 재컴파일이 필요 없다. 즉 문서 마스킹의 경우 문서 길이가 바뀔 때 새로운 BlockMask만 계산하면 되고, 새로운 kernel은 필요하지 않다.
 
 ```python
 document_id = torch.zeros(32768, dtype=torch.int, device="cuda")
 document_id[:4096] = 0
 document_id[4096:8192] = 1
 for i in range(8192, 32768, 8192):
-    document_id[i: i + 8192] = i // 8192 + 1
+    document_id[i : i + 8192] = i // 8192 + 1
 
 def document_causal_mask(b, h, q_idx, kv_idx):
     causal_mask = q_idx >= kv_idx
@@ -499,14 +499,14 @@ def document_causal_mask(b, h, q_idx, kv_idx):
 test_mask(mask_mod=document_causal_mask, S=32768)
 ```
 
-필자는에서4090상관련 내용된다oom，여기관련 내용작은관련 내용
+4090에서 실행하면 oom이 나므로, 여기서는 길이를 조금 줄인다:
 
 ```python
 document_id = torch.zeros(8192, dtype=torch.int, device="cuda")
 document_id[:4096] = 0
 document_id[4096:8192] = 1
 # for i in range(8192, 32768, 8192):
-#     document_id[i: i + 8192] = i // 8192 + 1
+#     document_id[i : i + 8192] = i // 8192 + 1
 
 def document_causal_mask(b, h, q_idx, kv_idx):
     causal_mask = q_idx >= kv_idx
@@ -518,13 +518,13 @@ test_mask(mask_mod=document_causal_mask, S=8192)
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/004.png)
 
-### 독립이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attentionmask)
+### Stand-Alone Self-Attention 마스킹
 
-이 예제에서는 크기가 H x W인 2D token grid가 있다고 가정한다. 각 query token은 가까운 이웃, 예를 들어 반경 8 안의 `pixel` token에만 attend한다고 본다.
+이 경우에는 크기가 (H x W)인 2차원 이미지가 token 시퀀스로 평탄화되어 있다고 상상해 보자. 우리는 2차원 관점에서 8`픽셀` 이내에 있는 token에만 attend하고자 한다.
 
-우리는가능로통해먼저할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다로관련 내용와서구현이mask_mod。그다음，우리는가능로이 부분은 원문의 해당 기술 설명을 이어서 서술한다개관련 내용의관련 내용여부에서관련 내용
+이 mask_mod는 먼저 1차원 위치를 2차원 좌표로 변환하는 방식으로 구현할 수 있다. 그다음에는 두 좌표의 거리가 윈도우 안에 들어오는지만 확인하면 된다.
 
-더많은관련 내용보다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Stand-Alone Self-Attention in Vision Models)https://arxiv.org/abs/1906.05909)
+더 자세한 내용은 논문 Stand-Alone Self-Attention in Vision Models(https://arxiv.org/abs/1906.05909)를 참고하라
 
 ```python
 H = 128
@@ -547,14 +547,14 @@ test_mask(mask_mod=sasa_mask)
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/005.png)
 
 
-### NATTEN mask
+### NATTEN 마스킹
 
-관련 내용개크기로 (H x W) 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다개token이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)에서관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel K_H x K_W)가능가능로관련 내용로중이 부분은 원문의 해당 기술 설명을 이어서 서술한다에서관련 내용그리고이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+크기가 (H x W)인 2차원 이미지가 token 시퀀스로 평탄화되어 있다고 하자. query는 고정된 kernel 영역 (K_H x K_W) 안의 key에 attend하며, 이 영역은 가능한 한 query를 중심에 두되 캔버스 안에 머무르고 항상 query 자신을 포함한다.
 
-관련 내용와SASA관련 내용있다관련 내용의관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)에서관련 내용보장관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다개수의관련 내용할 것이다관련 내용와kernel중관련 내용수행한다관련 내용아니이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)중이 부분은 원문의 해당 기술 설명을 이어서 서술한다에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이는 SASA와 비슷하지만, kernel을 캔버스 안에 유지해 모든 query가 고정된 개수의 key에 attend하도록 하는 추가 처리가 들어간다. key는 자신의 위치를 query가 아니라 kernel 중심과 비교한다. kernel 중심은 query 위치를 따라가려 하지만, 캔버스 가장자리로부터 일정한 거리(그 절반 길이)를 유지하도록 제한된다.
 
-더많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (NATTEN)저장소(https://github.com/SHI-Labs/NATTEN)。
-> 주의：더완전한의NATTEN구현할 것이다관련 내용대해kernel관련 내용의지원。NATTEN관련 내용융합의kernel관련 내용있다관련 내용가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (registertoken)가능。관련 내용가능관련 내용가능로에서Flex Attention중관련 내용여기관련 내용있다관련 내용
+더 많은 정보는 NATTEN 저장소(https://github.com/SHI-Labs/NATTEN)를 참고하라.
+> 주의: 더 완전한 NATTEN 구현이라면 kernel dilation 지원까지 포함할 것이다. NATTEN의 융합되지 않은 kernel에는 register token에 cross-attend할 수 있는 것과 같은 기능도 있다. 이런 기능은 Flex Attention으로도 표현할 수 있지만 여기서는 시도하지 않았다.
 
 ```python
 H = 128
@@ -588,9 +588,9 @@ test_mask(mask_mod=natten_mask)
 
 ### Alibi bias
 
-Alibi attentionbias에서 Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation(https://arxiv.org/abs/2108.12409) 중이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)그리고관련 내용에서관련 내용있다관련 내용의있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (ALiBi)아니된다할 것이다관련 내용추가까지관련 내용중；관련 내용통해와이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용와서bias이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (- attentionscore)
+Alibi attention bias는 Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation(https://arxiv.org/abs/2108.12409)에서 널리 알려졌으며, 추론 시 길이 외삽이라는 유용한 특성을 가진다고 주장한다. "ALiBi는 위치 임베딩을 단어 임베딩에 더하지 않는다. 대신 query-key attention score에 그 거리에 비례하는 페널티를 주어 bias를 건다."
 
-우리는할 것이다로관련 내용구현관련 내용로관련 내용개새의관련 내용가능，관련 내용에서score관련 내용함수중관련 내용사용관련 내용텐서의가능관련 내용함수관련 내용아니관련 내용텐서，관련 내용사용관련 내용가능로통해 `closure` 와서구현관련 내용에서여기，우리는관련 내용사용우리는관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)함수로및관련 내용개관련 내용의bias。
+여기서는 이를 두 가지 방식으로 구현해, score 수정 함수 안에서 다른 텐서를 활용할 수 있다는 새로운 기능을 부각한다. 함수 시그니처는 다른 텐서를 받지 않지만, 사용자는 `closure`를 통해 이를 구현할 수 있다. 여기서는 이미 아주 익숙해진 causal 마스크 함수와 head별 bias를 활용한다.
 
 ```python
 # Alibi Bias
@@ -638,7 +638,7 @@ test_mask(
 )
 ```
 
-> 여기의H관련 내용있다관련 내용우리는쓰기관련 내용개H=64와서보다하결과。이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (print_mask True)가능보다까지mask관련 내용
+> 여기서 H는 정의되어 있지 않으므로, H=64로 두고 결과를 확인한다. 또한 mask가 어떻게 생겼는지 보려면 print_mask를 True로 바꿔야 한다.
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/007.png)
 
@@ -646,12 +646,12 @@ test_mask(
 
 
 
-### Tanh 관련 내용상관련 내용
-우리는도가능로관련 내용사용이API구현tanh관련 내용상관련 내용통해tanh수행한다logit관련 내용상관련 내용에서Gemma 2중이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)
+### Tanh soft-capping
+이 API로 tanh soft-capping도 구현할 수 있다. tanh를 통한 logit soft-capping은 Gemma 2에서 널리 알려졌다.
 
-에서관련 내용하，있다관련 내용차이관련 내용이다，PyTorch（와CUDA/Triton）중의관련 내용`tanh`관련 내용된다낮춘다까지관련 내용개관련 내용상이 부분은 원문의 해당 기술 설명을 이어서 서술한다대해）관련 내용느린의SASS구현。관련 내용https://godbolt.org/z/W8afevWv1이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SASS)의관련 내용
+이 경우에는 미묘한 점이 몇 가지 있다. 특히 PyTorch(그리고 CUDA/Triton)의 표준 `tanh` 연산자는 수치적으로는 정확하지만 (상대적으로) 느린 SASS 구현으로 lowering된다. SASS가 어떤 모습인지는 https://godbolt.org/z/W8afevWv1 을 참고하라.
 
-따라서，에서관련 내용하，우리는관련 내용할 것이다`tanh`낮춘다까지이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (tanh)구현。우리는가능로통해에서PyTorch중관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다그다음수행한다Inductor낮춘다와서구현관련 내용
+따라서 이 경우에는 `tanh`를 근사 tanh 구현으로 lowering하고 싶다. PyTorch에 커스텀 연산자를 하나 등록한 다음 Inductor lowering을 지정하면 이를 구현할 수 있다.
 
 ```python
 def causal_mask(b, h, q_idx, kv_idx):
@@ -706,57 +706,57 @@ def tanh_soft_cap(score, b, h, q_idx, kv_idx):
 test_mask(tanh_soft_cap, mask_mod=causal_mask, skip_correctness=True)
 ```
 
-> 코드관련 내용의asm코드있다관련 내용이관련 내용없음이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)하：
+> 코드 안의 asm 코드에 오류가 있어 이 예제는 실행되지 않는다. 오류 메시지는 다음과 같다:
 
 ```shell
-ptxas /tmp/tmpmehxr5i1.ptx, line 3972; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 3977; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 3982; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 3987; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 3992; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 3997; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 4002; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 4007; error: Arguments mismatch for instruction 'tanh'
-ptxas /tmp/tmpmehxr5i1.ptx, line 4012; error: Arguments mismatch for instruction 'tanh'
-ptxas fatal: Ptx assembly aborted due to errors
+ptxas /tmp/tmpmehxr5i1.ptx, line 3972; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 3977; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 3982; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 3987; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 3992; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 3997; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 4002; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 4007; error   : Arguments mismatch for instruction 'tanh'
+ptxas /tmp/tmpmehxr5i1.ptx, line 4012; error   : Arguments mismatch for instruction 'tanh'
+ptxas fatal   : Ptx assembly aborted due to errors
 
 ```
 
-### 관련 내용아니관련 내용텐서
+### Nested Jagged Tensor
 
-관련 내용텐서이다관련 내용텐서관련 내용사용된다높은관련 내용와계산아니관련 내용가능로관련 내용사용FlexAttention이 부분은 원문의 해당 기술 설명을 이어서 서술한다로높은관련 내용대해아니관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (columnbatch)실행한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)
+Nested tensor는 불규칙한 데이터를 효율적으로 표현하고 계산하기 위한 텐서 서브클래스이다. 이런 데이터를 FlexAttention으로 처리하면 길이가 서로 다른 시퀀스 배치에 대해 causal attention을 효율적으로 수행할 수 있다.
 
-에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer NJT)아니관련 내용텐서)할 것이다관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다로관련 내용`[[sequence_0], [sequence_1], ..., [Sequence_B]], sum(*),..`
+내부적으로 NJT(Nested Jagged Tensor)는 불규칙 데이터를 연속된 데이터 `[[sequence_0], [sequence_1], ..., [Sequence_B]], sum(*),..` 형태로 저장한다.
 
 ```python
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다로보장결과가능관련 내용
+# 결과를 재현할 수 있도록 랜덤 시드 설정
 random.seed(0)
 torch.manual_seed(0)
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (batch)크기、관련 내용와차원
+# 배치 크기, head 수, 차원 정의
 batch_size = 16
 n_heads = 16
 D = 64
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (QKV)가능로계산관련 내용
+# 그래디언트를 계산할 수 있도록 QKV 값을 준비
 def prepare_qkv_values(tensor):
     return tensor._values.detach().requires_grad_()
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)인덱스관련 내용
+# 시퀀스 인덱스 테이블 구성
 def build_seq_idx(tensor: torch.Tensor):
     offsets = tensor.offsets()
     total_length = tensor.offsets()[-1].item()
-    # 생성한다부터0까지total_length의관련 내용텐서
+    # 0부터 total_length까지의 range 텐서 생성
     range_tensor = torch.arange(total_length, device="cuda", dtype=torch.int32)
 
-    # 관련 내용사용searchsorted관련 내용각개관련 내용의인덱스
+    # searchsorted로 각 위치의 인덱스를 찾는다
     seq_idx = torch.searchsorted(offsets, range_tensor, right=True) - 1
 
     return seq_idx
 
-# 생성한다NJT관련 내용할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)함수관련 내용로NJTmask함수
+# dense 마스크 함수를 NJT 마스크 함수로 변환하는 NJT 래퍼 생성
 def create_njt_wrapper(orig_mask_mod, offsets, seq_idx):
-    """관련 내용사용관련 내용할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)함수관련 내용로NJTmask함수"""
+    """dense 마스크 함수를 NJT 마스크 함수로 변환하는 범용 래퍼"""
 
     def njt_score_mod(b, h, q_idx, kv_idx):
         q_nested = q_idx - offsets[seq_idx[q_idx]]
@@ -766,18 +766,18 @@ def create_njt_wrapper(orig_mask_mod, offsets, seq_idx):
 
     return njt_score_mod
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (scoremask)함수
+# dense score 마스크 함수
 def causal_mask(b, h, q_idx, kv_idx):
     return q_idx >= kv_idx
     # return torch.where(q_idx >= kv_idx, score, -float("inf"))
 
-# 현재이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)반드시가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (128)
+# 현재 제약: 전체 시퀀스 길이는 128로 나누어떨어져야 한다
 sentence_lengths = [random.randint(1, 1024) for _ in range(batch_size - 1)]
 total = sum(sentence_lengths)
 sentence_lengths.append(128 - total % 128)
 total = sum(sentence_lengths)
 
-# 생성한다아니관련 내용텐서
+# 불규칙 텐서 생성
 ragged_tensors = [torch.randn(l, n_heads, D, device="cuda") for l in sentence_lengths]
 query = torch.nested.nested_tensor(
     ragged_tensors, layout=torch.jagged, requires_grad=True
@@ -789,30 +789,30 @@ value = torch.nested.nested_tensor(
     ragged_tensors, layout=torch.jagged, requires_grad=True
 )
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (seq_idx)
+# seq_idx 조회 테이블 구성
 offsets = query.offsets()
 seq_idx = build_seq_idx(query)
 
-# 생성한다NJT이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (scoremask)함수
+# NJT causal score 마스크 함수 생성
 causal_score_mod_njt = create_njt_wrapper(causal_mask, offsets, seq_idx)
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (QKV)
+# QKV 값 준비
 query_values = prepare_qkv_values(query)
 key_values = prepare_qkv_values(key)
 value_values = prepare_qkv_values(value)
 
-# 생성한다blockmask
+# 블록 마스크 생성
 block_mask = create_block_mask_cached(
     causal_score_mod_njt, 1, 1, total, total, device=query_values.device
 )
-# 관련 내용사용FlexAttention계산출력
+# FlexAttention으로 출력 계산
 out_flex = flex_attention(
     query_values.view(1, -1, n_heads, D).transpose(1, 2),
     key_values.view(1, -1, n_heads, D).transpose(1, 2),
     value_values.view(1, -1, n_heads, D).transpose(1, 2),
     block_mask=block_mask,
 )
-# 관련 내용사용Scaled Dot-Product Attention계산출력
+# Scaled Dot-Product Attention으로 출력 계산
 out_sdpa = F.scaled_dot_product_attention(
     query.transpose(1, 2),
     key.transpose(1, 2),
@@ -820,29 +820,29 @@ out_sdpa = F.scaled_dot_product_attention(
     is_causal=True,
 )
 
-# 관련 내용출력결과
+# 출력 결과 저장
 sdpa_outs = []
 flex_outs = []
 
-# 생성한다관련 내용출력
+# 그래디언트 출력 생성
 gradOut = torch.randn_like(out_sdpa)
 
-# 계산그리고이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SDPA)의출력와관련 내용
+# SDPA의 출력과 그래디언트를 계산해 저장
 sdpa_outs.append(out_sdpa)
 out_sdpa.backward(gradOut)
 sdpa_outs += [query.grad, key.grad, value.grad]
 
-# 계산그리고이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FlexAttention)의출력와관련 내용
+# FlexAttention의 출력과 그래디언트를 계산해 저장
 flex_outs.append(out_flex)
 out_flex.backward(gradOut._values.unsqueeze(0))
 flex_outs += [query_values.grad, key_values.grad, value_values.grad]
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다의출력와관련 내용
+# 두 방법의 출력과 그래디언트를 비교
 for flex, sdpa in zip(flex_outs, sdpa_outs):
     flex = flex.squeeze(0)
     torch.testing.assert_close(flex, sdpa._values, atol=1e-2, rtol=1e-2)
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다결과
+# 정확성 검사 결과 출력
 print("Correctness check passed ✅")
 print(block_mask)
 ```
@@ -851,11 +851,11 @@ print(block_mask)
 
 ### Flamingo Cross Attention
 
-🦩 Flamingo 관련 내용https://arxiv.org/pdf/2204.14198）소개이 부분은 원문의 해당 기술 설명을 이어서 서술한다모델（VLM）이 부분은 원문의 해당 기술 설명을 이어서 서술한다로관련 내용의관련 내용와관련 내용로입력，그리고생성한다관련 내용에 의해관련 내용의관련 내용로출력。”
+🦩 Flamingo 논문(https://arxiv.org/pdf/2204.14198)은 "시각 데이터와 텍스트가 교차로 섞인 형태를 입력으로 받아 자유 형식의 텍스트를 출력으로 생성하는 시각 언어 모델(VLM) 계열"을 소개한다.
 
-관련 내용사용 `VisionCrossAttentionMask` 와서보장관련 내용만관련 내용관련의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TorchTune)대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)있다관련 내용좋은의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (VisionCrossAttentionMask)https://github.com/pytorch/torchtune/blob/bbc48e089b072c7cbaea175bc70501b2193ba482/torchtune/modules/transforms/_transforms.py#L22-L43）
+이 모델은 `VisionCrossAttentionMask`를 활용해 텍스트가 관련 있는 이미지에만 attend하도록 보장한다. TorchTune에 이 마스크 유형에 대한 좋은 설명이 있다: VisionCrossAttentionMask(https://github.com/pytorch/torchtune/blob/bbc48e089b072c7cbaea175bc70501b2193ba482/torchtune/modules/transforms/_transforms.py#L22-L43)
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)보장이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)전관련 내용의관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다와서의또는아니관련의관련 내용
+이 attention 메커니즘은 텍스트 시퀀스가 앞선 이미지에는 완전히 attend하고, 그 밖의 미래 이미지나 관련 없는 이미지에는 attend하지 않도록 보장한다.
 
 ```python
 Example:
@@ -868,9 +868,9 @@ Example:
     [[0, 7], [1, 7], [7, 12]]
 ```
 
-에서위의관련 내용중，우리는할 것이다생성한다관련 내용개12 x sum(image_tokens_1 + image_tokens_2 + image_tokens_3)의mask
+위 예제에서는 12 x sum(image_tokens_1 + image_tokens_2 + image_tokens_3) 크기의 마스크를 생성한다
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (image_tokens)의크기로3
+image_tokens의 크기가 3이라고 가정한다
 
 ![](img/flex-attention-api-notebook-code-overview-a1e7de2b/010.png)
 
@@ -904,9 +904,9 @@ print(mask)
 ```
 
 
-# FlexAttention이다관련 내용구현의
+# FlexAttention은 어떻게 구현되어 있는가
 
-FlexAttention이다통해PyTorch컴파일관련 내용와서구현의，통해inductor후관련 내용생성한다FlexAttention의관련 내용대응의Triton코드。관련 내용구현관련 내용https://github.com/pytorch/pytorch/blob/ee09d066d35d7e17cf7e9479c0b8bfc70cffc264/torch/_inductor/kernel/flex_attention.py#L317 ，아래대해 flex_attention 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다둘러보기관련 내용하：
+FlexAttention은 PyTorch 컴파일러를 통해 구현되며, inductor 백엔드가 FlexAttention의 여러 변형에 대응하는 Triton 코드를 생성한다. 구체적인 구현은 https://github.com/pytorch/pytorch/blob/ee09d066d35d7e17cf7e9479c0b8bfc70cffc264/torch/_inductor/kernel/flex_attention.py#L317 을 참고하라. 아래에서 flex_attention의 핵심 진입점을 간단히 훑어본다:
 
 ```python
 # TODO: We probably also need a layout constraint?
@@ -921,7 +921,7 @@ def flex_attention(
     score_mod_other_buffers,
     mask_mod_other_buffers,
 ):
-    # 관련 내용 (row)코드관련 내용상관련 내용얻는다우리는에서API응용중관련 내용의score_mod와mask_mod이후관련 내용계산의Q,K,V
+    # 이 코드는 API 활용 부분에서 정의한 score_mod와 mask_mod를 거친 뒤 실제로 계산해야 할 Q, K, V를 가져온다
     (
         kv_num_blocks,
         kv_indices,
@@ -935,7 +935,7 @@ def flex_attention(
         SPARSE_Q_BLOCK_SIZE,
         mask_graph,
     ) = block_mask
-    // 생성한다관련 내용입력column이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score b h m n)개이 부분은 원문의 해당 기술 설명을 이어서 서술한다로query의관련 내용와int32
+    // score, b, h, m, n 다섯 개의 플레이스홀더를 담은 플레이스홀더 입력 리스트를 생성한다. 타입은 각각 query의 타입과 int32이다
     placeholder_inps = [
         create_placeholder(name, dtype, query.get_device())
         for name, dtype in [
@@ -946,11 +946,11 @@ def flex_attention(
             ("n", torch.int32),
         ]
     ]
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다입력와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)
+    // 플레이스홀더 입력과 그 밖의 score 수정 버퍼를 담아 서브그래프 버퍼를 구성한다
     subgraph_buffer = build_subgraph_buffer(
         placeholder_inps + list(score_mod_other_buffers), subgraph
     )
-    // 생성한다mask관련 내용의관련 내용입력column이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (b h m n)개이 부분은 원문의 해당 기술 설명을 이어서 서술한다로int32
+    // 마스크 그래프의 플레이스홀더 입력 리스트를 생성한다. b, h, m, n 네 개의 플레이스홀더이며 타입은 모두 int32이다
     mask_graph_placeholder_inps = [
         create_placeholder(name, dtype, query.get_device())
         for name, dtype in [
@@ -960,11 +960,11 @@ def flex_attention(
             ("n", torch.int32),
         ]
     ]
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask mask)의관련 내용입력와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)
+    // 마스크 그래프의 플레이스홀더 입력과 그 밖의 마스크 수정 버퍼를 담아 마스크 그래프 버퍼를 구성한다
     mask_graph_buffer = build_subgraph_buffer(
         mask_graph_placeholder_inps + list(mask_mod_other_buffers), mask_graph
     )
-    // 만약관련 내용사용Flex관련 내용반환한다생성한다의Flex이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)
+    // Flex 디코딩을 사용하는 경우, 생성한 Flex 디코딩 kernel을 반환한다
     if _use_flex_decoding(query):
         return create_flex_decoding_kernel(
             query,
@@ -977,7 +977,7 @@ def flex_attention(
             score_mod_other_buffers,
             mask_mod_other_buffers,
         )
-    // 대해관련 내용있다관련 내용수행한다realize관련 내용보장이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 모든 버퍼에 realize 연산을 수행해 실제로 인스턴스화되도록 한다
     for buf in [
         query,
         key,
@@ -994,34 +994,34 @@ def flex_attention(
         if buf is not None:
             buf.realize()
 
-    // 생성한다관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다크기와관련 내용
+    // 디바이스, 데이터 타입, 크기, stride 정보를 담은 레이아웃 객체를 생성한다
     layout = FixedLayout(
         query.get_device(),
         query.get_dtype(),
         query.get_size(),
         query.get_stride(),
     )
-    // 계산logsumexp의shape，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (query)의shape제거마지막으로관련 내용개차원
+    // logsumexp의 shape을 계산한다. 즉 query의 shape에서 마지막 차원을 제거한 것이다
     logsumexp_shape = query.get_size()[:-1]  # [B, H, M]
-    // 생성한다logsumexp텐서，관련 내용로float32，관련 내용와query관련 내용
+    // logsumexp 텐서를 생성한다. 타입은 float32이고 디바이스는 query와 동일하다
     logsumexp = empty_strided(
         logsumexp_shape,
         None,
         dtype=torch.float32,  # The logsumexp is always stored in fp32 regardless of the input dtype
         device=query.get_device(),
     )
-    // 관련 내용여부관련 내용에서완전한block，만약full_kv_num_blocks로None，관련 내용아니관련 내용에서완전한block
+    // full 블록이 존재하는지 판단한다. full_kv_num_blocks가 None이면 full 블록은 존재하지 않는다
     has_full_blocks = full_kv_num_blocks is not None
     if full_kv_num_blocks is None:
         full_kv_num_blocks, full_kv_indices = (
             empty(0, device=query.get_device()) for _ in range(2)
         )
-    // 초기화선택column관련 내용와설정column관련 내용
+    // choice 리스트와 config 리스트를 초기화한다
     choices: List[Any] = []
     configs: List[Tuple[int, int, int, int]] = []
-    // 추가기본설정
+    // 기본 config를 추가한다
     configs.append(_get_default_config_fwd(query))
-    // 만약관련 내용사용관련 내용큰이 부분은 원문의 해당 기술 설명을 이어서 서술한다추가관련 내용설정
+    // max autotune이 켜져 있으면 다른 config들도 추가한다
     if config.max_autotune:
         configs += [
             (128, 64, 4, 3),
@@ -1031,14 +1031,14 @@ def flex_attention(
             (64, 64, 4, 3),
         ]
 
-    // 관련 내용있다설정，만약block크기아니관련 내용또는설정로2단계，관련 내용
+    // 모든 config를 순회하면서 블록 크기가 맞지 않거나 config가 2 stage이면 건너뛴다
     for BLOCK_M, BLOCK_N, num_warps, num_stages in configs:
-        if SPARSE_KV_BLOCK_SIZE % BLOCK_N!= 0 or SPARSE_Q_BLOCK_SIZE % BLOCK_M!= 0:
+        if SPARSE_KV_BLOCK_SIZE % BLOCK_N != 0 or SPARSE_Q_BLOCK_SIZE % BLOCK_M != 0:
             continue
         if num_stages == 2:
             continue
 
-        // 할 것이다현재설정추가까지선택column관련 내용중
+        // 현재 config를 choice 리스트에 추가한다
         flex_attention_template.maybe_append_choice(
             choices=choices,
             input_nodes=[
@@ -1073,7 +1073,7 @@ def flex_attention(
             PRESCALE_QK=False,
             HAS_FULL_BLOCKS=has_full_blocks,
         )
-    // 생성한다사용된다관련 내용의입력column관련 내용
+    // 자동 튜닝에 사용할 입력 리스트를 생성한다
     inputs_for_autotuning = (
         [
             query,
@@ -1088,12 +1088,12 @@ def flex_attention(
         + list(score_mod_other_buffers)
         + list(mask_mod_other_buffers)
     )
-    // 생성한다입력생성한다함수관련 내용
+    // 입력 생성 함수 매핑을 생성한다
     input_gen_fns = {
         4: create_num_blocks_fake_generator(full_kv_indices),
         5: create_indices_fake,
     }
-    // 반환한다관련 내용선택관련 내용의결과와logsumexp
+    // 자동 튜닝 선택 알고리즘의 결과와 logsumexp를 반환한다
     return (
         autotune_select_algorithm(
             "flex_attention",
@@ -1108,7 +1108,8 @@ def flex_attention(
 ```
 
 
-이`flex_attention`함수의`block_mask`파라미터이다통해위API응용중관련 내용까지의`create_block_mask`함수와서생성한다의。그다음이함수이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (query key value subgraph blockmask block_mask scale)로및score와mask이 부분은 원문의 해당 기술 설명을 이어서 서술한다로입력。함수관련 내용통해생성한다관련 내용입력、관련 내용와mask관련 내용그리고관련 내용설정선택관련 내용의kernel와서구현 FlexAttention 계산。관련 내용반환한다관련 내용선택관련 내용의결과와 logsumexp 텐서。관련 내용의관련 내용도가능로보다하여기의triton kernel의관련 내용구현。
+이 `flex_attention` 함수의 `block_mask` 인자는 위 API 활용 부분에서 언급한 `create_block_mask` 함수로 생성한다. 그리고 이 함수는 query, key, value, subgraph(서브그래프), block_mask(블록 마스크), scale(스케일 팩터), 그리고 score 수정 버퍼와 마스크 수정 버퍼를 입력으로 받는다. 함수 내부에서는 플레이스홀더 입력을 만들고 서브그래프 버퍼와 마스크 그래프 버퍼를 구성한 뒤, config에 따라 적절한 kernel을 선택해 FlexAttention 계산을 구현한다. 최종적으로 자동 튜닝 선택 알고리즘의 결과와 logsumexp 텐서를 반환한다. 관심 있는 분은 여기 나오는 triton kernel의 구체적인 구현도 살펴보면 좋다.
+
 
 
 

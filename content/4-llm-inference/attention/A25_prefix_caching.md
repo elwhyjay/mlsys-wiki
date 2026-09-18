@@ -18,6 +18,11 @@
 
 ### 0x00 서문
 
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
+
 Prefix Caching 관련 글을 몇 편 봤는데 아주 명확하게 설명한 글은 많지 않다고 느꼈습니다. 최근 저도 관련 기술을 정리하고 싶어서 이 글을 쓰게 되었습니다. vLLM Automatic Prefix Caching의 소스 코드와 직접 그린 도해를 함께 보며 이 문제를 최대한 분명하게 설명해 보겠습니다.
 
 최근 PagedAttention, Prefix Cache(RadixAttention), Chunk Prefills의 기술 포인트를 정리하려고 합니다. 이 세 기술은 TensorRT-LLM과 vLLM이라는 대표적인 LLM 추론 프레임워크에서 이미 지원됩니다. 따라서 실제 적용 관점에서도 원리를 이해할 가치가 있습니다. PagedAttention 관련 글은 이미 인터넷에 많으므로 여기서는 자세히 반복하지 않고, 시간이 되면 PagedAttention V1/V2 글을 따로 보충하겠습니다. 이 글은 그 시리즈의 첫 번째 글이며, Prefix Cache의 기술 포인트를 정리하고 도해와 소스 분석을 결합해 vLLM Automatic Prefix Caching 구현을 살펴봅니다. 관련 기술의 전체 timeline과 논문은 대략 다음과 같습니다.
@@ -286,9 +291,16 @@ Prefix Caching 최적화 아이디어가 SGLang RadixAttention과 vLLM 구현에
 
 더 많은 KV Cache 최적화 관련 논문 자료는 제가 정리한 Awesome LLM Inference 저장소를 참고해 주세요.
 
+![](images/v2-03035ee8090b5156c75dd13fa6a87d66_1440w.png)
+*Awesome LLM Inference*
 
 ### 0x0b 정리
 
 이 글에서는 SGLang RadixAttention 원리를 설명하고, 도해와 코드를 함께 보며 vLLM의 Hash RadixAttention 구현을 자세히 분석했습니다. vLLM의 Hash RadixAttention 내용은 Hash RadixAttention, Hash Prefix Tree, Prefix/Generate 단계 Hash 처리, Prefix + Generated KV Caching scheduling 로직, 경계 상황 분석, vLLM Automatic Prefix Caching의 다중 턴 대화 적용 분석, 코드 적용 실습을 포함합니다.
+
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
 
 오타는 먼저 올린 뒤 계속 수정하겠습니다.

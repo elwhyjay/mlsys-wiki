@@ -18,6 +18,11 @@
 
 ### 0x00 서문
 
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
+
 가장 먼저 적어 둘 말은 이것입니다. **profile 없이는 최적화도 없습니다.** 물론 profile이 틀렸다면 최적화도 없겠지만요.
 
 최근 FA2가 TensorRT 최적화와 비교해 Attention 성능을 얼마나 개선하는지 보고 싶어 여가 시간에 profile을 해 보기로 했습니다. TensorRT 8.6.1 이후에는 MHA/FMHA plugin이 제거되었고, MHA/FMHA 구현이 TensorRT 내부로 들어갔습니다. 저는 TensorRT 9.2를 사용했습니다. 따라서 QKV Attention이 이미 graph optimization에 hit되어 FMHA kernel에서 실행되고 있을 수 있습니다. 그러면 실제로 측정하는 것은 원래의 흩어진 kernel 성능이 아니라 FMHA 성능입니다.
@@ -516,3 +521,10 @@ Memory Accesses는 `d^2`에 비례합니다. 따라서 d가 커질수록 FA의 M
 - Linux에서 profile을 보충해 Myelin 최적화 이후 Attention이 MHA Kernel에서 실행되는지 확인하기. 완료.
 - 계속 업데이트 중입니다. 오류가 있으면 먼저 올린 뒤 수정하겠습니다. 지적 환영합니다.
 - issue를 올려 도움을 요청했고, 해결되었습니다.
+
+FlashAttention 시리즈 원리 상세 설명은 관련 글을 참고하세요.
+
+더 많은 기술 노트와 CUDA 학습 노트는 CUDA-Learn-Notes(CUDA Learn Notes with PyTorch)를 참고해 주세요. CUDA-Learn-Notes에는 **LLM/VLM** 글 정리와 **SGEMM/HGEMM/GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **1.5k+ stars**를 달성했습니다. 링크: https://github.com/DefTruth/CUDA-Learn-Notes
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*

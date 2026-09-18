@@ -9,11 +9,16 @@
 - 0x03 DeepSpeed-Ulysses Sequence Parallelism
 - 0x04 통신량 분석
 - 0x05 Ulysses + Zero3
+- 0x06 정리
 
 ### 0x00 서문
 
 최근 여러 sequence parallel 기술을 업무에서 사용할 일이 있어, 제 이해를 기록하는 짧은 글을 몇 편 작성하려고 합니다. DeepSpeed-Ulysses Sequence Parallelism은 비교적 직관적으로 이해하기 어렵고, Megatron-LM의 Tensor/Sequence Parallelism은 그보다 더 바로 보입니다. 따라서 이 글에서는 도해 방식으로 DeepSpeed-Ulysses와 Megatron-LM TP/SP를 얕은 곳에서 깊은 곳으로 순서대로 정리합니다.
 
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
 
 이 글의 내용은 다음과 같습니다.
 
@@ -292,6 +297,18 @@ Zero-3 model parallel의 구체적인 동작은 모델 weight를 각 GPU에 나�
 ![](images/v2-40145d697081e6dc865c9216335ed53b_1440w.png)
 *DeepSpeed-Ulysses + Zero3*
 
+### 0x06 정리
+
+이 글에서는 Megatron-LM에서 자주 사용하는 Tensor Parallelism과 Sequence Parallelism의 원리를 간단히 설명했습니다. Sequence Parallelism 사용 전후의 per-layer activation memory 점유를 분석했고, Megatron-LM의 Sequence Parallelism은 자체 Tensor Parallelism과 함께 사용되어야 한다는 점도 보았습니다.
+
+또한 도해 방식으로 DeepSpeed-Ulysses Sequence Parallelism 알고리즘 원리를 설명했습니다. 논문 설명에 따르면 DeepSpeed-Ulysses는 두 번의 All-To-All을 통해 sequence parallel을 구현하며, Megatron-LM의 Sequence Parallelism과 비교했을 때 더 낮은 통신량을 가집니다. 다만 실제 사용에서는 `head_num`이 P(GPU 수)로 나누어떨어져야 한다는 조건이 있습니다. `head_num`은 무한히 늘릴 수 없으므로 P는 실제로 `head_num`에 의해 제한됩니다.
+
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
+
+늘 그렇듯 오류가 있으면 먼저 올린 뒤 계속 수정하겠습니다.
 
 ## 참고
 

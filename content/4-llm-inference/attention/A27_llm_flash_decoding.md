@@ -8,6 +8,11 @@
 
 FlashDecoding과 FlashDecoding++를 별도로 분리하여 Decoding 최적화에 관한 글을 정리하려고 합니다. 이후 더 많은 세부 내용을 보충할 예정입니다. 이전 Attention 최적화 글에서는 FlashAttention-1과 FlashAttention-2 알고리즘의 각 최적화 포인트, FlashAttention IO 복잡도 분석 및 적용 시나리오, FlashAttention의 분산 훈련/추론에서의 활용을 상세히 설명했으며, 도해를 통해 FlashAttention의 MQA/GQA 및 Causal Mask 처리를 쉽게 설명했습니다. 마지막으로 Memory-Efficient Attention도 정리했습니다. 이전 글을 먼저 읽고 본 글을 읽는 것을 추천합니다.
 
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 문서 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 주요 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/A27_llm_flash_decoding/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+CUDA Learn Notes with PyTorch
+
 ### 0x01 FlashDecoding
 
 일반적으로 FlashAttention forward pass는 Q의 seqlen 차원과 batch_size 차원에서 병렬화합니다. 현재 Q의 분할된 Queries에 대해, forward pass는 thread block 내에서 모든 K, V 블록을 순차적으로 순회하며 각 블록의 국소 Attention 출력을 계산합니다. 각 국소 Attention 출력은 thread block 내부 순회 과정에서 매 반복마다 현재 반복의 값에 따라 scale되며, K, V를 따른 반복이 완료되면 최종적으로 올바른 Output을 얻습니다.
@@ -77,6 +82,9 @@ FA2 forward pass에서 FlashDecoding++로의 차이를 보면, FlashDecoding++�
 ### 0x03 총결
 
 본 글은 FlashDecoding과 FlashDecoding++의 원리를 분석하고 두 알고리즘의 차이를 비교했습니다. 참고로 LLM 추론 배포 각 방향의 새로운 진전은 제가 정리한 Awesome-LLM-Inference를 추천합니다. 링크: https://github.com/xlite-dev/Awesome-LLM-Inference
+
+![](images/A27_llm_flash_decoding/v2-947f5839ce17eaa172e0bed862d1e3a9_1440w.png)
+Awesome-LLM-Inference
 
 ## 참고
 

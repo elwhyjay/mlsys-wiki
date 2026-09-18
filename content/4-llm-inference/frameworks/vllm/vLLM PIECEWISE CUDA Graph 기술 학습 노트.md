@@ -1,20 +1,18 @@
-# vLLM PIECEWISE CUDA Graph 기술 학습 노트
+# 0x0. 서문
 
-## 0x0. 머리말
+최근에 어떤 분이 vLLM으로 모델을 띄우다가 CUDA Graph를 capture하는 log가 `Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)`라는 문장으로 바뀐 것을 발견하고, 이게 무슨 최적화인지 나와 이야기해 보고 싶어 했다. 그래서 소스 코드를 뒤져 보며 파악한 내용을 정리한 것이 이 블로그다. 예전에 모델을 띄울 때는 계속 일반적인 CUDA Graph capture log를 봤는데, 이 `PIECEWISE` CUDA Graph는 vLLM compilation 모듈의 핵심 기술이며, prefill 단계에서 Attention을 제외한 연산자에도 CUDA Graph를 적용할 수 있게 해 주어 CPU Overhead를 줄이고 성능을 높여 준다.
 
-최근있다동료사용vLLM시작모델의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (capture CUDA Graph)의log이 부분은 원문의 해당 기술 설명을 이어서 서술한다`Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)`，그다음관련 내용필자는논의하이이다관련 내용최적화，필자는가서소스 코드를 살펴보았다이해해 보았다관련 내용있다이관련 내용우리는이전에는시작모델관련 내용보다까지의이다일반의CUDA Graph capture log，이`PIECEWISE` CUDA Graph 이다vLLM compilation이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의이 부분은 원문의 해당 기술 설명을 이어서 서술한다가능로관련 내용우리는에서prefill단계대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Attention)의operator모두사용상CUDA Graph，부터관련 내용줄인다CPU Overhead관련 내용성능향상。
+PIECEWISE 기술의 핵심 아이디어는 큰 계산 그래프를 특정 연산자를 기준으로 잘라낸 다음 각 서브그래프를 따로 컴파일하는 것이다. 이렇게 하면 컴파일 복잡도를 낮추면서도 더 많은 연산자가 CUDA Graph의 성능 최적화를 누릴 수 있다. vLLM의 compilation 모듈은 그래프 분할, 연산자 융합 Pass, 여러 컴파일 백엔드 등의 기술을 아우른다.
 
-PIECEWISE관련 내용의핵심 아이디어이다큰의계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다의operator분할，그다음관련 내용컴파일각개이 부분은 원문의 해당 기술 설명을 이어서 서술한다낮춘다컴파일복잡도，관련 내용더많은operator가능사용상CUDA Graph의성능최적화。vLLM의compilation이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)포괄이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)융합Pass、많은관련 내용컴파일후관련 내용
+이 글에서는 vLLM compilation 모듈의 기술적 세부 사항을 전체 아키텍처부터 구체적인 구현까지 기록하면서 핵심 기술 포인트를 하나씩 정리한다.
 
-이 글기록관련 내용하vLLM compilation이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의기술 세부 사항，부터관련 내용까지관련 내용구현，핵심 기술 포인트모두관련 내용
+# 0x1. vLLM Compilation 아키텍처
 
-## 0x1. vLLM Compilation관련 내용
+vLLM의 Compilation 시스템은 계층적 설계를 채택했으며, 주로 다음과 같은 핵심 컴포넌트로 구성된다.
 
-vLLM의Compilation관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)주로 포함한다로하관련 내용개관련 내용
+## 0x1.1 Compilation 레벨 설계
 
-### 0x1.1 Compilation관련 내용
-
-vLLM관련 내용많은관련 내용컴파일관련 내용부터`CompilationLevel`관련 내용가능로보다관련 내용
+vLLM은 여러 컴파일 레벨을 정의하고 있으며, `CompilationLevel` 열거형에서 이를 확인할 수 있다.
 
 ```python
 class CompilationLevel(IntEnum):
@@ -24,14 +22,14 @@ class CompilationLevel(IntEnum):
     PIECEWISE = 3
 ```
 
-- `NO_COMPILATION`: 아니수행한다관련 내용컴파일
-- `DYNAMO_AS_IS`: 관련 내용사용PyTorch Dynamo의기본row로
-- `DYNAMO_ONCE`: 관련 내용사용Dynamo컴파일관련 내용그다음관련 내용스케줄링까지컴파일후의코드
-- `PIECEWISE`: 관련 내용컴파일，관련 내용이다vLLM의관련 내용새
+- `NO_COMPILATION`: 어떤 컴파일도 수행하지 않는다
+- `DYNAMO_AS_IS`: PyTorch Dynamo의 기본 동작을 사용한다
+- `DYNAMO_ONCE`: Dynamo로 한 번 컴파일한 뒤 컴파일된 코드로 바로 디스패치한다
+- `PIECEWISE`: 분할 컴파일이며, 이것이 vLLM의 핵심 혁신이다
 
-### 0x1.2 Compilation후관련 내용
+## 0x1.2 Compilation 백엔드 아키텍처
 
-vLLM지원많은관련 내용컴파일후관련 내용통해`CompilerInterface`관련 내용인터페이스관련 내용
+vLLM은 여러 컴파일 백엔드를 지원하며, `CompilerInterface` 추상 인터페이스를 통해 통합적으로 관리한다.
 
 ```python
 class CompilerInterface:
@@ -53,112 +51,112 @@ class CompilerInterface:
         raise NotImplementedError("caching is not supported")
 ```
 
-현재vLLM구현이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Compilation)후관련 내용
+현재 vLLM은 세 가지 Compilation 백엔드를 구현하고 있다.
 
-1. **EagerAdaptor**: 관련 내용반환한다원본관련 내용아니수행한다컴파일
-2. **InductorAdaptor**: 관련 내용사용PyTorch Inductor수행한다컴파일（관련 내용사용된다PyTorch 2.5-2.7）
-3. **InductorStandaloneAdaptor**: 관련 내용사용독립의Inductor컴파일관련 내용사용된다PyTorch 2.8+）
+1. **EagerAdaptor**: 원본 그래프를 그대로 반환하며 컴파일하지 않는다
+2. **InductorAdaptor**: PyTorch Inductor로 컴파일한다 (PyTorch 2.5-2.7에 적용)
+3. **InductorStandaloneAdaptor**: 독립적인 Inductor 컴파일러를 사용한다 (PyTorch 2.8+에 적용)
 
-## 0x2. 관련 내용컴파일(Piecewise Compilation)관련 내용
+# 0x2. 분할 컴파일(Piecewise Compilation) 기술      
 
-### 0x2.1 관련 내용
+## 0x2.1 핵심 설계
 
-관련 내용컴파일이다vLLM의관련 내용새，관련 내용이다큰의계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)분할，그다음관련 내용컴파일각개관련 내용이관련 내용큰의관련 내용이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)가능사용까지prefill단계，이전에는prefill단계왜냐하면입력관련 내용이다관련 내용의，어렵다사용CUDA Graph최적화。
+분할 컴파일은 vLLM의 핵심 혁신으로, 기본 아이디어는 큰 계산 그래프를 특정 연산자를 기준으로 잘라낸 다음 각 서브그래프를 따로 컴파일하는 것이다. 이 기술의 가장 큰 가치는 CUDA Graph를 prefill 단계에도 쓸 수 있게 한 점이다. 예전에는 prefill 단계의 입력 길이가 동적이어서 CUDA Graph로 최적화하기가 어려웠다.
 
-통해PIECEWISE이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vLLM)가능로：
+PIECEWISE 기술을 통해 vLLM은 다음을 할 수 있다.
 
-1. **에서prefill단계관련 내용사용CUDA Graph**: 대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Attention)의operator（이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (MLP RMSNorm)사용CUDA Graph，크게줄인다CPU Overhead
-2. **낮춘다컴파일복잡도**: 큰관련 내용나눈다작은관련 내용각개관련 내용독립컴파일최적화
-3. **높인다컴파일cachehit rate**: 작은관련 내용의cache더관련 내용중，줄인다관련 내용컴파일관련 내용
-4. **지원더관련 내용의최적화**: 아니관련 내용의operator가능로사용아니관련 내용의최적화관련 내용
+1. **prefill 단계에서 CUDA Graph 사용**: Attention을 제외한 연산자(MLP, RMSNorm 등)에 CUDA Graph를 적용하여 CPU Overhead를 크게 줄인다
+2. **컴파일 복잡도 감소**: 큰 그래프를 작은 그래프로 쪼개어 각 서브그래프를 독립적으로 컴파일하고 최적화한다
+3. **컴파일 캐시 히트율 향상**: 작은 그래프는 캐시에 더 잘 히트하므로 중복 컴파일 시간이 줄어든다
+4. **더 세밀한 단위의 최적화 지원**: 연산자 종류에 따라 서로 다른 최적화 전략을 쓸 수 있다
 
-그래서우리는보게 된다`Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)`관련 내용의log，설명vLLM관련 내용에서로prefill와decode단계의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (workloadcapture)의CUDA Graph。
+그래서 `Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)` 같은 log를 보게 되는데, 이는 vLLM이 prefill과 decode 단계가 섞인 workload에 대해 분할된 CUDA Graph를 capture하고 있다는 뜻이다.
 
-### 0x2.2 PIECEWISE모드하의Prefill단계CUDA Graph Capture 관련 내용
+## 0x2.2 PIECEWISE 모드에서의 Prefill 단계 CUDA Graph Capture 분석
 
-우리는와서보다보다vLLM이다관련 내용에서PIECEWISE모드하대해Prefill단계의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Attentionoperator)수행한다CUDA Graph capture의。
+vLLM이 PIECEWISE 모드에서 Prefill 단계의 non-Attention 연산자를 어떻게 CUDA Graph로 capture하는지 살펴보자.
 
-#### Capture Size의관련 내용와관련 내용후관련 내용
+### Capture Size 결정과 분할 백엔드 메커니즘
 
-vLLM통해`compilation_config.compile_sizes`와서관련 내용로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (batch size)컴파일와capture CUDA Graph。기본관련 내용하，vLLM된다관련 내용`cudagraph_capture_sizes`관련 내용계산관련 내용하：
+vLLM은 `compilation_config.compile_sizes`를 통해 어떤 batch size에 대해 컴파일하고 CUDA Graph를 capture할지 결정한다. 기본적으로 vLLM은 `cudagraph_capture_sizes`를 기준으로 자동 추론하며, 계산 로직은 다음과 같다.
 
 ```python
-# 에서 vllm/config/__init__.py 중
+# vllm/config/__init__.py 에서
 possible_sizes = [1, 2, 4] + [8 * i for i in range(1, 1025)]
 max_graph_size = min(max_num_seqs * 2, 512)
-# 관련 내용까지: [1, 2, 4, 8, 16, 24, 32, 40,..., max_graph_size]
+# 최종 결과: [1, 2, 4, 8, 16, 24, 32, 40, ..., max_graph_size]
 ```
 
-에서`PiecewiseBackend`관련 내용중，구현관련 내용의capture관련 내용각개관련 내용된다로아니관련 내용의batch size생성한다독립의컴파일entry，제관련 내용까지이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (size)수행한다컴파일，후관련 내용사용：
+`PiecewiseBackend` 클래스에 구체적인 capture 로직이 구현되어 있다. 각 서브그래프는 batch size별로 독립적인 컴파일 entry를 만들고, 특정 size를 처음 만났을 때 컴파일한 뒤 이후에는 그대로 재사용한다.
 
 ```python
-# 에서 vllm/compilation/cuda_piecewise_backend.py 중
+# vllm/compilation/cuda_piecewise_backend.py 에서
 class PiecewiseBackend:
     def __call__(self, *args) -> Any:
         runtime_shape = args[self.sym_shape_indices[0]]
         
         if runtime_shape not in self.concrete_size_entries:
-            # 대해관련 내용아니에서capturecolumn관련 내용중의size，관련 내용사용관련 내용사용컴파일관련 내용
+            # capture 목록에 없는 size에 대해서는 범용 컴파일 그래프를 사용
             return self.compiled_graph_for_general_shape(*args)
         
         entry = self.concrete_size_entries[runtime_shape]
         if not entry.compiled:
-            # 제관련 내용까지이size관련 내용수행한다컴파일
+            # 이 size를 처음 만났을 때 컴파일을 수행
             entry.compiled = True
             entry.runnable = self.vllm_backend.compiler_manager.compile(
-                self.graph, args,..., runtime_shape=runtime_shape)
+                self.graph, args, ..., runtime_shape=runtime_shape)
         
         return entry.runnable(*args)
 ```
 
-#### CUDA Graph의Capture와Replay관련 내용
+### CUDA Graph의 Capture와 Replay 메커니즘
 
-각개컴파일후의관련 내용모두된다관련 내용`CUDAGraphWrapper`관련 내용제관련 내용까지관련 내용개batch descriptor관련 내용된다capture CUDA Graph；후관련 내용호출한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (replay)
+컴파일된 각 서브그래프는 `CUDAGraphWrapper`로 감싸진다. 어떤 batch descriptor를 처음 만나면 CUDA Graph를 capture하고, 이후 호출에서는 바로 replay한다.
 
 ```python
-# 에서 vllm/compilation/cuda_graph.py 중
+# vllm/compilation/cuda_graph.py 에서
 class CUDAGraphWrapper:
     def __call__(self, *args, **kwargs):
-        # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (runtime mode)여부관련 내용
-        if cudagraph_runtime_mode!= self.runtime_mode:
+        # runtime mode가 일치하는지 확인
+        if cudagraph_runtime_mode != self.runtime_mode:
             return self.runnable(*args, **kwargs)
         
         if entry.cudagraph is None:
-            # 제관련 내용까지이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (capture CUDA Graph)
+            # 처음 만났을 때 CUDA Graph를 capture
             cudagraph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(cudagraph, pool=self.graph_pool):
                 output = self.runnable(*args, **kwargs)
             entry.cudagraph = cudagraph
             return output
         
-        # 후관련 내용호출한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (replay)
+        # 이후 호출은 바로 replay
         entry.cudagraph.replay()
         return entry.output
 ```
 
-#### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Capture)의operator와성능최적화
+### 실제로 Capture되는 연산자와 성능 최적화
 
-에서PIECEWISE모드하，vLLM주요대해로하operator수행한다CUDA Graph capture：
+PIECEWISE 모드에서 vLLM은 주로 다음 연산자들을 CUDA Graph로 capture한다.
 
-- **MLPlayeroperator**: Linearlayermatrix multiplication、관련 내용함수（SiLU、GELU관련 내용차이관련 내용
-- **Normoperator**: RMSNorm、LayerNorm및관련 내용와관련 내용의융합버전  
-- **이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)**: FP8/INT8이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (per-token/per-tensor)
-- **이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)**: Embeddinglayer、이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (element-wise)
+- **MLP 레이어 연산자**: Linear 레이어의 행렬 곱, 활성화 함수(SiLU, GELU 등), residual connection
+- **Norm 연산자**: RMSNorm, LayerNorm 및 이들과 양자화가 융합된 버전  
+- **양자화 연산자**: FP8/INT8 양자화, 각종 per-token/per-tensor 양자화
+- **그 외 연산자**: Embedding 레이어, 위치 인코딩, element-wise 연산
 
-**핵심관련 내용**: Attentionoperator때문에대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)에서Prefill단계아니된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (capture)실행한다。
+**핵심 제외 대상**: Attention 연산자는 시퀀스 길이에 민감하기 때문에 Prefill 단계에서 capture되지 않고 동적 실행을 유지한다.
 
 
-#### 관련 내용있다관련 내용중CUDA Graph관련 내용의Padding관련 내용
+### CUDA Graph에 히트하지 못했을 때의 Padding 로직
 
-관련 내용있다관련 내용중CUDA Graph，vLLM관련 내용있다padding관련 내용와서최적화성능。vLLM관련 내용계산관련 내용개`bs_to_padded_graph_size`배열，구현O(1)의padding size관련 내용
+CUDA Graph에 히트하지 못하더라도 vLLM에는 성능을 최적화하기 위한 padding 로직이 있다. vLLM은 `bs_to_padded_graph_size` 배열을 미리 계산해 두어 O(1)로 padding size를 조회한다.
 
 ```python
-# CUDA Graph이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (padding)까지최근의capture size
+# CUDA Graph 범위 내: 가장 가까운 capture size로 padding
 def pad_for_cudagraph(self, batch_size: int) -> int:
     return self.compilation_config.bs_to_padded_graph_size[batch_size]
 
-# Eager Mode：padding까지TP size의관련 내용사용된다Sequence Parallelism최적화）
-if (cudagraph_mode!= CUDAGraphMode.NONE and num_tokens <= cudagraph_batch_sizes[-1]):
+# Eager Mode: TP size의 배수로 padding (Sequence Parallelism 최적화용)
+if (cudagraph_mode != CUDAGraphMode.NONE and num_tokens <= cudagraph_batch_sizes[-1]):
     num_tokens_padded = self.vllm_config.pad_for_cudagraph(num_tokens)
 else:
     # Eager mode: pad to multiple of tensor_parallel_size for SP
@@ -166,15 +164,15 @@ else:
         num_tokens_padded = round_up(num_tokens, tp_size)
 ```
 
-관련 내용설정`cudagraph_capture_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256]`와`tensor_parallel_size = 8`관련 내용
-- batch_size=10 → padding까지16（관련 내용중CUDA Graph）
-- batch_size=300 → padding까지304（Eager mode + SP padding）
+예를 들어 `cudagraph_capture_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256]`과 `tensor_parallel_size = 8`로 설정한 경우다.
+- batch_size=10 → 16으로 padding (CUDA Graph 히트)
+- batch_size=300 → 304로 padding (Eager mode + SP padding)
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (padding vLLM)에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (batch size)하모두가능있다아니관련 내용의성능。
+이러한 이중 padding 전략 덕분에 vLLM은 다양한 batch size에서 괜찮은 성능을 낼 수 있다.
 
-### 0x2.3 관련 내용구현
+## 0x2.3 그래프 분할 구현
 
-에서`backends.py`중의`split_graph`함수구현이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+`backends.py`의 `split_graph` 함수가 그래프 분할 로직을 구현한다.
 
 ```python
 def split_graph(graph: fx.GraphModule, ops: list[str]) -> tuple[fx.GraphModule, list[SplitItem]]:
@@ -196,17 +194,17 @@ def split_graph(graph: fx.GraphModule, ops: list[str]) -> tuple[fx.GraphModule, 
     split_gm = torch.fx.passes.split_module.split_module(
         graph, None, lambda node: node_to_subgraph_id[node], keep_original_order=True)
     
-    #... 관련 내용결과
+    # ... 분할 결과 처리
     return split_gm, outputs
 ```
 
-#### 핵심파라미터이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (splitting_ops)
+### 핵심 파라미터 분석: splitting_ops
 
-여기관련 내용의`ops`파라미터와서관련 내용`compilation_config.splitting_ops`，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)로관련 내용부터관련 내용볼 수 있다：
+여기에 전달되는 `ops` 파라미터는 `compilation_config.splitting_ops`에서 오며, 어떤 연산자를 분할 지점으로 삼을지 정의한다. 소스 코드에서 다음을 확인할 수 있다.
 
-**1. 기본의Attentionoperatorcolumn관련 내용**
+**1. 기본 Attention 연산자 목록**
 ```python
-# 에서 vllm/config/compilation.py 중
+# vllm/config/compilation.py 에서
 _attention_ops: ClassVar[list[str]] = [
     "vllm.unified_attention",
     "vllm.unified_attention_with_output", 
@@ -219,7 +217,7 @@ _attention_ops: ClassVar[list[str]] = [
 ]
 ```
 
-**2. 관련 내용추가의MoEoperator**
+**2. 동적으로 추가되는 MoE 연산자**
 ```python
 if envs.VLLM_ALL2ALL_BACKEND == "deepep_high_throughput":
     # exclude MoE dispatch/combine from capture by ensuring
@@ -234,21 +232,21 @@ if envs.VLLM_ALL2ALL_BACKEND == "deepep_high_throughput":
             self.splitting_ops.append(op)
 ```
 
-**3. 관련 내용**
-- 관련 내용까지`splitting_ops`중의operator관련 내용된다에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)전후생성한다관련 내용
-- 각개관련 내용모두된다생성한다관련 내용개새의`subgraph_id`
-- 관련 내용할 것이다원본의큰관련 내용많은개독립의관련 내용
+**3. 분할 로직**
+- `splitting_ops`에 있는 연산자를 만나면 그 연산자의 앞뒤에 분할 지점을 만든다
+- 각 분할 지점마다 새로운 `subgraph_id`가 생성된다
+- 이렇게 해서 원래의 큰 그래프가 여러 개의 독립적인 서브그래프로 분할된다
 
-**4. 관련 내용효과**
-- **Attention관련 내용**：이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)관련의operator，관련 내용실행한다
-- **MLP관련 내용**：이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Linear)함수관련 내용가능로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph capture)
-- **Norm관련 내용**：이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (RMSNorm)정규화operator，관련 내용가능로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (capture)
+**4. 분할 효과**
+- **Attention 서브그래프**: attention 관련 연산자를 포함하며 동적 실행을 유지한다
+- **MLP 서브그래프**: Linear, 활성화 함수 등을 포함하며 CUDA Graph로 capture될 수 있다
+- **Norm 서브그래프**: RMSNorm 등 정규화 연산자를 포함하며 마찬가지로 capture될 수 있다
 
-여기의핵심이다`keep_original_order=True`，관련 내용후의관련 내용와서의관련 내용실행한다，아니된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vLLM)가능대해아니관련 내용의operator관련 내용사용아니관련 내용의관련 내용
+여기서 핵심은 `keep_original_order=True`로, 분할된 서브그래프가 원래 순서대로 실행되어 의미가 바뀌지 않도록 보장한다. 이를 통해 vLLM은 연산자 종류에 따라 서로 다른 처리 전략을 적용할 수 있다.
 
-### 0x2.4 관련 내용후관련 내용구현
+## 0x2.4 분할 백엔드 구현
 
-`PiecewiseCompileInterpreter`담당실행한다관련 내용컴파일：
+`PiecewiseCompileInterpreter`가 분할 컴파일 실행을 담당한다.
 
 ```python
 class PiecewiseCompileInterpreter(torch.fx.Interpreter):
@@ -259,51 +257,51 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):
             index = self.compile_submod_names.index(target)
             submod = self.fetch_attr(target)
             
-            # 컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (shape)의관련 내용
+            # 동적 shape 그래프를 컴파일
             compiled_graph_for_dynamic_shape = self.vllm_backend.compiler_manager.compile(
                 submod, args, self.compilation_config.inductor_compile_config,
                 self.compilation_config, graph_index=index,
                 num_graphs=len(self.compile_submod_names), runtime_shape=None)
             
-            # 생성한다관련 내용후관련 내용
+            # 분할 백엔드 생성
             piecewise_backend = PiecewiseBackend(
                 submod, self.vllm_config, index, len(self.compile_submod_names),
                 sym_shape_indices, compiled_graph_for_dynamic_shape, self.vllm_backend)
             
-            # 만약관련 내용사용CUDA Graph，관련 내용로CUDAGraphWrapper
-            if self.compilation_config.cudagraph_mode!= CUDAGraphMode.NONE:
+            # CUDA Graph가 활성화되어 있으면 CUDAGraphWrapper로 감싼다
+            if self.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
                 static_graph_wrapper_class = resolve_obj_by_qualname(
                     current_platform.get_static_graph_wrapper_cls())
                 self.module.__dict__[target] = static_graph_wrapper_class(
                     runnable=piecewise_backend, vllm_config=self.vllm_config,
-                    runtime_mode=CUDAGraphMode.PIECEWISE,...)
+                    runtime_mode=CUDAGraphMode.PIECEWISE, ...)
             else:
                 self.module.__dict__[target] = piecewise_backend
         
         return output
 ```
 
-## 0x3. vLLM Compilation operator융합관련 내용
+# 0x3. vLLM Compilation 연산자 융합 기술
 
-### 0x3.1 융합관련 내용
+## 0x3.1 융합 프레임워크 설계
 
-vLLM에서Compilation이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)구현관련 내용완전한의operator융합관련 내용주로 포함한다：
+vLLM은 Compilation 모듈에 완전한 연산자 융합 프레임워크를 구현했으며, 주로 다음을 포함한다.
 
-1. **FusionPass**: 관련 내용사용융합Pass，주요이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (RMSNorm+)의융합
-2. **ActivationQuantFusionPass**: 관련 내용융합
-3. **AttnFusionPass**: attentionoperator융합
-4. **AllReduceFusionPass**: 관련 내용융합
+1. **FusionPass**: 범용 융합 Pass로, 주로 RMSNorm+양자화 융합을 처리한다
+2. **ActivationQuantFusionPass**: 활성화 양자화 융합
+3. **AttnFusionPass**: attention 연산자 융합
+4. **AllReduceFusionPass**: 집합 통신 융합
 
-### 0x3.2 RMSNorm관련 내용융합구현
+## 0x3.2 RMSNorm 양자화 융합 구현
 
-로RMSNorm+FP8관련 내용융합로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vLLM)사용PyTorch의pattern matcher수행한다모드관련 내용와관련 내용
+RMSNorm+FP8 양자화 융합을 예로 들면, vLLM은 PyTorch의 pattern matcher를 사용해 패턴 매칭과 치환을 수행한다.
 
 ```python
 class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
     def register(self, pm_pass: PatternMatcherPass, record_match: Callable):
         def pattern(result: torch.Tensor, input: torch.Tensor, residual: torch.Tensor,
                    weight: torch.Tensor, scale: torch.Tensor):
-            # 원본모드：관련 내용하다fused_add_rms_norm，다시하다관련 내용
+            # 원래 패턴: 먼저 fused_add_rms_norm을 하고 그다음 양자화
             at = auto_functionalized(RMS_ADD_OP, input=input, residual=residual,
                                    weight=weight, epsilon=self.epsilon)
             at1 = auto_functionalized(self.QUANT_OP, result=result, input=at[1], scale=scale)
@@ -311,7 +309,7 @@ class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
         
         def replacement(result: torch.Tensor, input: torch.Tensor, residual: torch.Tensor,
                        weight: torch.Tensor, scale: torch.Tensor):
-            # 융합후의모드：관련 내용개operator완료관련 내용있다관련 내용
+            # 융합 후 패턴: 하나의 연산자가 모든 연산을 수행
             at = auto_functionalized(self.FUSED_OP, result=result, input=input,
                                    residual=residual, weight=weight, scale=scale,
                                    epsilon=self.epsilon)
@@ -321,135 +319,135 @@ class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
                               extra_check=lambda m: record_match(self.Match(m, self.QUANT_OP, self.FUSED_OP)))
 ```
 
-여기의핵심관련 내용
+여기서의 핵심 기술 포인트는 다음과 같다.
 
-1. 관련 내용사용`auto_functionalized`이 부분은 원문의 해당 기술 설명을 이어서 서술한다보장함수이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-2. 통해`extra_check`관련 내용기록관련 내용지원많은출력모드의관련 내용
-3. 관련 내용완전한의입력출력관련 내용
+1. `auto_functionalized`로 in-place 연산을 감싸서 함수형 프로그래밍 의미를 보장한다
+2. `extra_check` 콜백으로 매칭을 기록하여 다중 출력 패턴의 수동 처리를 지원한다
+3. 완전한 입출력 매핑 관계를 정의한다
 
-### 0x3.3 많은출력관련 내용
+## 0x3.3 다중 출력 매칭 처리
 
-대해관련 내용있다많은개출력의융합모드，vLLM구현`MultiOutputMatch`관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (PyTorch pattern matcher)대해많은출력지원아니관련 내용의문제。
+출력이 여러 개인 융합 패턴을 위해 vLLM은 `MultiOutputMatch` 클래스를 구현하여, PyTorch pattern matcher의 다중 출력 지원이 완전하지 않은 문제를 처리한다.
 
-#### 문제배경
+### 문제 배경
 
-에서operator융합중，관련 내용까지많은출력의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (RMSNorm+)융합：
+연산자 융합에서는 출력이 여러 개인 상황을 자주 만난다. 예를 들어 RMSNorm+양자화 융합이 그렇다.
 
 ```python
-# 원본모드：관련 내용개독립의operator
+# 원래 패턴: 두 개의 독립적인 연산자
 # 1. RMSNorm: 입력 -> (None, normalized_output, residual)  
-# 2. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (: normalized_output -)> (None, quantized_result, scale)
+# 2. 양자화: normalized_output -> (None, quantized_result, scale)
 
-# 융합후：관련 내용개operator관련 내용많은개출력
-# 융합operator: 입력 -> (None, quantized_result, scale, residual)
+# 융합 후: 하나의 연산자가 여러 개의 출력을 만든다
+# 융합 연산자: 입력 -> (None, quantized_result, scale, residual)
 ```
 
-PyTorch의pattern matcher에서관련 내용많은출력관련 내용에서bug，따라서vLLM구현이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+PyTorch의 pattern matcher는 이런 다중 출력 치환을 처리할 때 버그가 있어서, vLLM은 수동 처리 메커니즘을 구현했다.
 
-#### 핵심 구현관련 내용
+### 핵심 구현 메커니즘
 
-**1. 모드관련 내용와기록**
+**1. 패턴 매칭과 기록**
 
 ```python
 class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
     def register(self, pm_pass, record_match):
         def pattern(result, input, residual, weight, scale):
-            # 원본모드：관련 내용하다RMSNorm，다시하다관련 내용
+            # 원래 패턴: 먼저 RMSNorm을 하고 그다음 양자화
             at = auto_functionalized(RMS_ADD_OP, input=input, residual=residual, weight=weight)
             at1 = auto_functionalized(self.QUANT_OP, result=result, input=at[1], scale=scale)
-            return at1[1], at[2]  # 반환한다관련 내용결과와관련 내용차이
+            return at1[1], at[2]  # 양자화 결과와 residual을 반환
         
         def replacement(result, input, residual, weight, scale):
-            # 융합후：관련 내용개operator완료관련 내용있다관련 내용
+            # 융합 후: 하나의 연산자가 모든 연산을 수행
             at = auto_functionalized(self.FUSED_OP, result=result, input=input, 
                                    residual=residual, weight=weight, scale=scale)
-            return at[1], at[2]  # 반환한다관련 내용의출력
+            return at[1], at[2]  # 동일한 출력을 반환
         
-        # 핵심：관련 내용사용extra_check기록이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+        # 핵심: extra_check로 매칭을 기록하여 수동 처리를 트리거한다
         pm.register_replacement(pattern, replacement, inputs, pm.fwd_only, pm_pass,
                               extra_check=lambda m: record_match(self.Match(m, self.QUANT_OP, self.FUSED_OP)))
 ```
 
-**2. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다**
+**2. 수동 치환 처리**
 
 ```python
 class Match(QuantMultiOutputMatch):
     def process(self):
-        # 1. 관련 내용까지관련 내용중의핵심관련 내용
-        rms_node = self.find_auto_fn(RMS_ADD_OP)      # RMSNorm관련 내용
-        quant_node = self.find_auto_fn(self.QUANT_OP)  # 관련 내용
+        # 1. 매칭에서 핵심 노드를 찾는다
+        rms_node = self.find_auto_fn(RMS_ADD_OP)      # RMSNorm 노드
+        quant_node = self.find_auto_fn(self.QUANT_OP)  # 양자화 노드
         
-        # 2. 관련 내용융합후의관련 내용
+        # 2. 융합된 노드를 삽입한다
         with self.inserting_after_match():
-            # 관련 내용출력관련 내용융합관련 내용의관련 내용개출력대응관련 내용와서관련 내용개관련 내용의관련 내용개출력
+            # 출력 매핑 관계 정의: 융합 노드의 어떤 출력이 원래 어떤 노드의 어떤 출력에 대응하는지
             fused_return_mapping = {
-                1: (quant_node, 1),  # 융합관련 내용의제1개출력 -> 관련 내용의제1개출력
-                2: (rms_node, 2),    # 융합관련 내용의제2개출력 -> RMSNorm관련 내용의제2개출력
+                1: (quant_node, 1),  # 융합 노드의 1번 출력 -> 양자화 노드의 1번 출력
+                2: (rms_node, 2),    # 융합 노드의 2번 출력 -> RMSNorm 노드의 2번 출력
             }
             self.insert_fused_node(fused_return_mapping, **kwargs)
 ```
 
-**3. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다**
+**3. 핵심 치환 로직**
 
 ```python
 def insert_fused_node(self, fused_return_mapping: dict[int, tuple[fx.Node, int]], **kwargs):
-    # 1. 생성한다융합operator관련 내용
+    # 1. 융합 연산자 노드를 생성
     fused_node = self.insert_auto_fn(self.FUSED_OP, kwargs)
     
-    # 2. 로융합관련 내용의각개출력생성한다getitem관련 내용
+    # 2. 융합 노드의 각 출력에 대해 getitem 노드를 생성
     indices = fused_return_mapping.keys()  # [1, 2]
     getitem_nodes = self.insert_getitems(fused_node, indices)  # [fused_node[1], fused_node[2]]
     
-    # 3. 관련 내용새관련 내용사용관련 내용
+    # 3. 사용자 노드를 다시 바인딩
     for idx, getitem_node in zip(indices, getitem_nodes):
         old_node, old_idx = fused_return_mapping[idx]
         
-        # 관련 내용까지관련 내용와서의getitem관련 내용만약관련 내용에서）
+        # 원래의 getitem 노드를 찾는다 (존재하는 경우)
         old_getitem = find_getitem_maybe(old_node, old_idx)
         if old_getitem is not None:
-            # 할 것이다관련 내용있다관련 내용사용old_getitem의관련 내용로새의getitem_node
+            # old_getitem을 사용하는 모든 곳을 새로운 getitem_node로 교체
             old_getitem.replace_all_uses_with(getitem_node)
-            # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (meta)사용된다가서함수관련 내용
+            # meta 정보를 복사, defunctionalization에 사용
             getitem_node.meta["val"] = old_getitem.meta["val"]
         
-        # 관련 내용융합관련 내용의meta관련 내용
+        # 융합 노드의 meta 정보를 설정
         meta_val[idx] = old_node.meta["val"][old_idx]
     
     fused_node.meta["val"] = tuple(meta_val)
 ```
 
-#### 관련 내용효과
+### 실제 효과
 
-통해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vLLM)할 것이다：
+이 메커니즘을 통해 vLLM은 다음 구조를
 
 ```python
-# 원본관련 내용
+# 원래 그래프 구조
 input -> RMSNorm -> normalized_output -> Quantize -> quantized_result
       -> residual                    -> scale
 ```
 
-관련 내용로：
+다음과 같이 변환한다.
 
 ```python  
-# 융합후관련 내용
+# 융합 후 그래프 구조
 input -> FusedRMSNormQuant -> quantized_result
                            -> scale  
                            -> residual
 ```
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (PyTorch pattern matcher)의이 부분은 원문의 해당 기술 설명을 이어서 서술한다융합후관련 내용의관련 내용와성능최적화효과。
+이러한 설계는 PyTorch pattern matcher의 한계를 해결하는 동시에 융합 후 그래프의 정확성과 성능 최적화 효과를 보장한다.
 
-## 0x4. vLLM Compilation 관련 내용융합관련 내용
+# 0x4. vLLM Compilation 집합 통신 융합 기술
 
-### 0x4.1 AllReduce융합
+## 0x4.1 AllReduce 융합
 
-vLLM구현많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (AllReduce)융합모드，관련 내용
+vLLM은 여러 가지 AllReduce 융합 패턴을 구현했으며, 다음을 포함한다.
 
-1. **GEMM + ReduceScatter**: 할 것이다matrix multiplication와reduce-scatter융합
-2. **AllGather + GEMM**: 할 것이다all-gather와matrix multiplication융합
-3. **RMSNorm + AllReduce**: 할 것이다RMSNorm와all-reduce융합
+1. **GEMM + ReduceScatter**: 행렬 곱과 reduce-scatter를 융합
+2. **AllGather + GEMM**: all-gather와 행렬 곱을 융합
+3. **RMSNorm + AllReduce**: RMSNorm과 all-reduce를 융합
 
-로GEMM+ReduceScatter로관련 내용
+GEMM+ReduceScatter를 예로 들면 다음과 같다.
 
 ```python
 class GEMMReduceScatterPattern(BasePattern):
@@ -469,9 +467,9 @@ class GEMMReduceScatterPattern(BasePattern):
         pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 ```
 
-### 0x4.2 FlashInfer관련 내용융합
+## 0x4.2 FlashInfer 통신 융합
 
-vLLM이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FlashInfer)의관련 내용융합관련 내용가능：
+vLLM은 FlashInfer의 통신 융합 기능도 통합하고 있다.
 
 ```python
 if flashinfer_comm and hasattr(flashinfer_comm, "trtllm_allreduce_fusion"):
@@ -488,11 +486,11 @@ if flashinfer_comm and hasattr(flashinfer_comm, "trtllm_allreduce_fusion"):
             pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 ```
 
-## 0x5. vLLM Compilation 컴파일cache관련 내용
+# 0x5. vLLM Compilation 컴파일 캐시 메커니즘
 
-### 0x5.1 cache관련 내용
+## 0x5.1 캐시 아키텍처 설계
 
-vLLM Compilation구현관련 내용의컴파일cache관련 내용통해`CompilerManager`관련 내용
+vLLM Compilation은 잘 갖춰진 컴파일 캐시 메커니즘을 구현했으며, `CompilerManager`를 통해 통합 관리한다.
 
 ```python
 class CompilerManager:
@@ -516,34 +514,34 @@ class CompilerManager:
         self.compiler.initialize_cache(cache_dir=cache_dir, disable_cache=disable_cache, prefix=prefix)
 ```
 
-### 0x5.2 cache관련 내용
+## 0x5.2 캐시 키 설계
 
-cache관련 내용의관련 내용많은개관련 내용
+캐시 키 설계는 여러 가지 요소를 고려한다.
 
 ```python
 def __call__(self, graph: fx.GraphModule, example_inputs) -> Callable:
     if not self.compilation_config.cache_dir:
         factors = []
-        # 1. 관련 내용변수관련 내용
+        # 1. 환경 변수 해시
         env_hash = envs.compute_hash()
         factors.append(env_hash)
         
-        # 2. vLLM설정관련 내용
+        # 2. vLLM 설정 해시
         config_hash = vllm_config.compute_hash()
         factors.append(config_hash)
         
-        # 3. 코드파일관련 내용
+        # 3. 코드 파일 해시
         forward_code_files = list(sorted(self.compilation_config.traced_files))
         hash_content = []
         for filepath in forward_code_files:
             hash_content.append(filepath)
-            if filepath!= "<string>":
+            if filepath != "<string>":
                 with open(filepath) as f:
                     hash_content.append(f.read())
         code_hash = hashlib.md5("\n".join(hash_content).encode(), usedforsecurity=False).hexdigest()
         factors.append(code_hash)
         
-        # 4. 컴파일관련 내용
+        # 4. 컴파일러 해시
         compiler_hash = self.compiler_manager.compute_hash(vllm_config)
         factors.append(compiler_hash)
         
@@ -551,135 +549,135 @@ def __call__(self, graph: fx.GraphModule, example_inputs) -> Callable:
         cache_dir = os.path.join(envs.VLLM_CACHE_ROOT, "torch_compile_cache", hash_key)
 ```
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (cache)의관련 내용와있다관련 내용
+이러한 설계가 캐시의 정확성과 유효성을 보장한다.
 
-### 0x5.3 cache관련 내용사용관련 내용
+## 0x5.3 캐시 사용 방식
 
-#### cache목차관련 내용
+### 캐시 디렉터리 구조
 
-vLLM의컴파일cache관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)목차관련 내용
+vLLM의 컴파일 캐시는 계층적 디렉터리 구조를 사용한다.
 
 ```bash
 ~/.cache/vllm/torch_compile_cache/
-├── hash_key_1/           # 기반으로설정와코드의관련 내용
-│   ├── rank_0_1/         # 많은관련 내용 (/)많은GPU의rank관련 내용
-│   │   ├── prefix_name/  # 아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의전관련 내용
-│   │   │   ├── vllm_compile_cache.py      # 컴파일cache인덱스
-│   │   │   ├── computation_graph.py       # 계산관련 내용
-│   │   │   └── transformed_code.py        # 관련 내용후의코드
-│   │   └── shared_artifacts/              # 관련 내용컴파일관련 내용
+├── hash_key_1/           # 설정과 코드 기반의 해시 값
+│   ├── rank_0_1/         # 다중 프로세스/다중 GPU의 rank 정보
+│   │   ├── prefix_name/  # 모듈별 prefix
+│   │   │   ├── vllm_compile_cache.py      # 컴파일 캐시 인덱스
+│   │   │   ├── computation_graph.py       # 계산 그래프 덤프
+│   │   │   └── transformed_code.py        # 변환된 코드
+│   │   └── shared_artifacts/              # 공유 컴파일 산출물
 │   └── rank_2_3/
 └── hash_key_2/
 ```
 
-더관련 내용의관련 내용가능로보다`class CompilerManager`의구현。
+더 자세한 내용은 `class CompilerManager`의 구현을 보면 된다.
 
-#### cache관련 내용
+### 캐시 키 설계
 
-cache이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (hash_key_1), hash_key_2...)관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다`(runtime_shape, graph_index, backend_name)`
+캐시 키(hash_key_1, hash_key_2 ...)는 `(runtime_shape, graph_index, backend_name)`이라는 3-튜플 구조를 사용한다
 
 ```python
-# cache관련 내용예제
+# 캐시 키 예시
 cache_key = (
     16,           # runtime_shape: batch_size=16
-    2,            # graph_index: 제2개관련 내용
-    "inductor"    # backend_name: 관련 내용사용Inductor후관련 내용
+    2,            # graph_index: 2번째 서브그래프  
+    "inductor"    # backend_name: Inductor 백엔드 사용
 )
 ```
 
-#### cache로드와관련 내용
+### 캐시 로드와 저장 흐름
 
-**1. 컴파일관련 내용의cache관련 내용**
+**1. 컴파일 시의 캐시 조회**
 
 ```python
 def compile(self, graph, example_inputs, graph_index, runtime_shape):
-    # 1. 먼저관련 내용부터cache로드
+    # 1. 먼저 캐시에서 로드를 시도
     compiled_graph = self.load(graph, example_inputs, graph_index, runtime_shape)
     if compiled_graph is not None:
         logger.info("Directly load compiled graph from cache, took %.3f s", elapsed)
         return compiled_graph
     
-    # 2. cache관련 내용중，수행한다컴파일
-    compiled_graph, handle = self.compiler.compile(graph, example_inputs,...)
+    # 2. 캐시 미스이면 컴파일을 수행
+    compiled_graph, handle = self.compiler.compile(graph, example_inputs, ...)
     
-    # 3. 할 것이다컴파일결과관련 내용까지cache
+    # 3. 컴파일 결과를 캐시에 저장
     if not envs.VLLM_DISABLE_COMPILE_CACHE and handle is not None:
         self.cache[(runtime_shape, graph_index, self.compiler.name)] = handle
         compilation_counter.num_cache_entries_updated += 1
         self.is_cache_updated = True
 ```
 
-**2. cache관련 내용**
+**2. 캐시 영속화**
 
 ```python
 def save_to_file(self):
     if self.disable_cache or not self.is_cache_updated:
         return
-    # 관련 내용사용Python관련 내용저장，관련 내용와가능읽다관련 내용
+    # Python 형식으로 저장하여 디버깅과 가독성을 높인다
     printer = pprint.PrettyPrinter(indent=4)
     data = printer.pformat(self.cache)
     with open(self.cache_file_path, "w") as f:
         f.write(data)
 ```
 
-#### cache관련 내용의좋은관련 내용
+### 캐시 메커니즘의 이점
 
 ```python
-# 관련 내용시작（없음cache）
+# 최초 기동 (캐시 없음)
 logger.info("Compiling graph for shape 16, took 45.2 s")
 
-# 후관련 내용시작（관련 내용중cache）  
+# 이후 기동 (캐시 히트)  
 logger.info("Directly load compiled graph from cache, took 0.8 s")
 ```
 
-cache관련 내용중가능로할 것이다컴파일관련 내용부터관련 내용줄인다까지아니까지1관련 내용이다대해관련 내용큰모델와관련 내용의관련 내용컴파일관련 내용
+캐시에 히트하면 컴파일 시간을 수십 초에서 1초 미만으로 줄일 수 있으며, 특히 대규모 모델과 복잡한 분할 컴파일 시나리오에서 효과가 크다.
 
 
-## 0x6. vLLM Compilation 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+# 0x6. vLLM Compilation 데코레이터 시스템
 
-vLLM관련 내용완전한의이 부분은 원문의 해당 기술 설명을 이어서 서술한다와서관련 내용모델컴파일，주요관련 내용`@support_torch_compile`와`@ignore_torch_compile`관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+vLLM은 모델 컴파일을 단순화하기 위한 완전한 데코레이터 시스템을 제공하며, 핵심 데코레이터로 `@support_torch_compile`과 `@ignore_torch_compile` 두 가지가 있다.
 
-### 0x6.1 컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+## 0x6.1 컴파일 데코레이터 설계
 
-#### 관련 내용사용관련 내용
+### 기본 사용 방식
 
-vLLM관련 내용`@support_torch_compile`관련 내용와서관련 내용모델컴파일：
+vLLM은 모델 컴파일을 단순화하기 위해 `@support_torch_compile` 데코레이터를 제공한다.
 
 ```python
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1:)사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다차원）
+# 방식 1: 데코레이터를 그대로 사용 (동적 차원 자동 추론)
 @support_torch_compile
 class MyModel(nn.Module):
     def forward(self, x: torch.Tensor, y: Optional[torch.Tensor]):
-...
+        ...
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (2:)차원
+# 방식 2: 동적 차원을 명시적으로 지정
 @support_torch_compile(dynamic_arg_dims={"x": 0, "y": [0, 1]})
 class MyModel(nn.Module):
     def forward(self, x: torch.Tensor, y: torch.Tensor):
-...
+        ...
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (3:)컴파일
+# 방식 3: 조건부 컴파일
 @support_torch_compile(enable_if=lambda config: config.model_config.dtype == torch.float16)
 class MyModel(nn.Module):
     def forward(self, x: torch.Tensor):
-...
+        ...
 ```
 
-#### 관련 내용차원관련 내용
+### 동적 차원 자동 추론
 
-관련 내용있다관련 내용`dynamic_arg_dims`이 부분은 원문의 해당 기술 설명을 이어서 서술한다된다관련 내용
+`dynamic_arg_dims`를 명시적으로 지정하지 않으면 데코레이터가 자동으로 추론한다.
 
 ```python
 def cls_decorator_helper(cls: _T) -> _T:
     sig = inspect.signature(cls.forward)
     inferred_dynamic_arg_dims = {}
     
-    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (forward)의관련 내용있다파라미터
+    # forward 메서드의 모든 파라미터를 순회
     for k, v in sig.parameters.items():
-        # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다차원
+        # 타입 어노테이션을 기반으로 동적 차원을 자동 추론
         if v.annotation in [torch.Tensor, Optional[torch.Tensor], 
                            IntermediateTensors, Optional[IntermediateTensors]]:
-            inferred_dynamic_arg_dims[k] = 0  # 제관련 내용개차원관련 내용로관련 내용
+            inferred_dynamic_arg_dims[k] = 0  # 첫 번째 차원을 동적으로 표시
     
     logger.debug("Inferred dynamic dimensions for forward method of %s: %s", 
                  cls, list(inferred_dynamic_arg_dims.keys()))
@@ -687,36 +685,36 @@ def cls_decorator_helper(cls: _T) -> _T:
     return _support_torch_compile(cls, inferred_dynamic_arg_dims, enable_if)
 ```
 
-**관련 내용**：
-- `torch.Tensor`또는`Optional[torch.Tensor]`：제0관련 내용로관련 내용
-- `IntermediateTensors`：관련 내용있다tensor의제0관련 내용로관련 내용
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+**추론 규칙**:
+- `torch.Tensor` 또는 `Optional[torch.Tensor]`: 0번째 차원을 동적으로 표시
+- `IntermediateTensors`: 모든 tensor의 0번째 차원을 동적으로 표시
+- 그 외 타입: 무시
 
-`IntermediateTensors`이다vLLM로Pipeline Parallelism관련 내용의관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-관련 내용많은개관련의tensor（주요이다`hidden_states`와`residual`）
-- 지원Pipeline stage관련 내용의관련 내용
-- 에서컴파일관련 내용중있다관련 내용의관련 내용차원관련 내용
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용인터페이스，관련 내용얻는다와관련 내용아니관련 내용의중관련 내용
+`IntermediateTensors`는 vLLM이 Pipeline Parallelism을 위해 설계한 전용 데이터 구조이며, 다음과 같은 특징이 있다.
+서로 연관된 여러 tensor(주로 `hidden_states`와 `residual`)를 캡슐화한다
+- Pipeline stage 사이의 데이터 전달을 지원한다
+- 컴파일 시스템에서 특별한 동적 차원 처리를 받는다
+- 딕셔너리 형태의 접근 인터페이스를 제공하여 여러 중간 상태를 쉽게 읽고 쓸 수 있다
 
 
-### 0x6.2 관련 내용구현관련 내용
+## 0x6.2 데코레이터 구현 메커니즘
 
-#### 관련 내용와관련 내용
+### 클래스 상속과 메서드 교체
 
-관련 내용통해관련 내용의관련 내용와관련 내용와서구현컴파일지원：
+데코레이터는 클래스의 상속 관계를 수정하고 메서드를 교체하는 방식으로 컴파일 지원을 구현한다.
 
 ```python
 def _support_torch_compile(cls, dynamic_arg_dims, enable_if):
-    # 1. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다추가컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 1. 상속 관계를 수정하여 컴파일 래퍼 기반 클래스를 추가
     cls.__bases__ = cls.__bases__ + (TorchCompileWrapperWithCustomDispatcher,)
     
     old_init = cls.__init__
     
-    # 2. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (__init__)추가컴파일설정
+    # 2. __init__ 메서드를 교체하여 컴파일 설정을 추가
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = '', **kwargs):
         old_init(self, vllm_config=vllm_config, prefix=prefix, **kwargs)
         
-        # 관련 내용여부관련 내용컴파일
+        # 컴파일이 필요한지 판단
         enable_compile = enable_if is None or enable_if(vllm_config)
         self.do_not_compile = (
             vllm_config.compilation_config.level in [
@@ -735,91 +733,91 @@ def _support_torch_compile(cls, dynamic_arg_dims, enable_if):
     cls.__init__ = __init__
 ```
 
-#### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (shape)와컴파일스케줄링
+### 동적 shape 표시와 컴파일 디스패치
 
 ```python
 def __call__(self, *args, **kwargs):
-    # 관련 내용컴파일의관련 내용
+    # 컴파일을 건너뛰는 경우
     if self.do_not_compile or torch.compiler.is_compiling():
         return self.forward(*args, **kwargs)
     
-    # 관련 내용컴파일：관련 내용차원
+    # 최초 컴파일: 동적 차원 표시
     if len(self.compiled_codes) < 1:
         sig = inspect.signature(self.__class__.forward)
         bound_args = sig.bind(self, *args, **kwargs)
         bound_args.apply_defaults()
         
-        # 로각개파라미터관련 내용차원
+        # 각 파라미터에 대해 동적 차원을 표시
         for k, dims in dynamic_arg_dims.items():
             arg = bound_args.arguments.get(k)
             if arg is not None:
                 dims = [dims] if isinstance(dims, int) else dims
                 
                 if isinstance(arg, torch.Tensor):
-                    # 관련 내용인덱스：-1관련 내용마지막으로관련 내용
+                    # 음수 인덱스 처리: -1은 마지막 차원을 의미
                     dims = [arg.ndim + dim if dim < 0 else dim for dim in dims]
                     torch._dynamo.mark_dynamic(arg, dims)
                     
                 elif isinstance(arg, IntermediateTensors):
-                    # 로IntermediateTensors중의관련 내용있다tensor관련 내용차원
+                    # IntermediateTensors 안의 모든 tensor에 동적 차원을 표시
                     for tensor in arg.tensors.values():
                         dims = [tensor.ndim + dim if dim < 0 else dim for dim in dims]
                         torch._dynamo.mark_dynamic(tensor, dims)
         
-        # 관련 내용컴파일관련 내용
+        # 컴파일 과정 모니터링 시작
         start_monitoring_torch_compile(self.vllm_config)
         logger.debug("Start compiling function %s", self.original_code_object)
     
-    # 컴파일스케줄링관련 내용
+    # 컴파일 디스패치 로직
     if len(self.compiled_codes) < 1 or not self.use_custom_dispatcher:
-        # 관련 내용사용Dynamo의기본스케줄링관련 내용
+        # Dynamo의 기본 디스패치 메커니즘을 사용
         torch._dynamo.eval_frame.remove_from_cache(self.original_code_object)
         
-        # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Dynamo)의파일，사용된다cache관련 내용
+        # Dynamo가 추적한 파일을 수집, 캐시 무효화에 사용
         self.vllm_config.compilation_config.traced_files.add(
             self.original_code_object.co_filename)
         
-        # 통해patch이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (inline)함수의파일
+        # patch 메커니즘으로 인라인 함수의 파일을 수집
         with patch.object(InliningInstructionTranslator, 'inline_call', patched_inline_call):
             output = self.compiled_callable(*args, **kwargs)
         return output
     
-    # 관련 내용사용관련 내용스케줄링관련 내용호출한다컴파일후의코드
+    # 커스텀 디스패처로 컴파일된 코드를 직접 호출
     with self.dispatch_to_code(0):
         model_output = self.forward(*args, **kwargs)
         return model_output
 ```
 
-### 0x6.3 컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+## 0x6.3 컴파일 제어 데코레이터
 
-#### @ignore_torch_compile관련 내용
+### @ignore_torch_compile 데코레이터
 
-사용된다관련 내용의컴파일관련 내용
+부모 클래스의 컴파일 데코레이터를 무시하는 데 사용한다.
 
 ```python
 @ignore_torch_compile
 class ChildModel(ParentModelWithCompile):
     def forward(self, x):
-        # 이관련 내용아니된다관련 내용컴파일，관련 내용있다@support_torch_compile
-...
+        # 부모 클래스에 @support_torch_compile이 있어도 이 클래스는 컴파일되지 않는다
+        ...
 
 def ignore_torch_compile(cls: _T) -> _T:
     """
-    이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (support_torch_compile)의관련 내용
-    - 만약관련 내용있다support_torch_compile관련 내용있다ignore_torch_compile，관련 내용아니된다관련 내용컴파일
-    - 만약관련 내용있다ignore_torch_compile관련 내용있다support_torch_compile，관련 내용된다관련 내용컴파일
-    - 만관련 내용현재관련 내용의forward관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)
+    support_torch_compile 데코레이터의 영향을 무시한다.
+    - 부모 클래스에 support_torch_compile이 있고 자식 클래스에 ignore_torch_compile이 있으면 자식 클래스는 컴파일되지 않는다
+    - 부모 클래스에 ignore_torch_compile이 있고 자식 클래스에 support_torch_compile이 있으면 자식 클래스는 여전히 컴파일된다
+    - 현재 클래스의 forward 메서드에만 영향을 주며, 서브 모듈에는 영향을 주지 않는다
     """
     setattr(cls, IGNORE_COMPILE_KEY, True)
     return cls
 ```
 
-#### 관련 내용컴파일지원
+### 조건부 컴파일 지원
 
-통해`enable_if`파라미터구현관련 내용컴파일：
+`enable_if` 파라미터를 통해 조건부 컴파일을 구현한다.
 
 ```python
-# 만에서관련 내용하컴파일
+# 특정 조건에서만 컴파일
 @support_torch_compile(
     enable_if=lambda config: (
         config.model_config.dtype == torch.float16 and 
@@ -828,14 +826,14 @@ def ignore_torch_compile(cls: _T) -> _T:
 )
 class ConditionalModel(nn.Module):
     def forward(self, x):
-...
+        ...
 ```
 
-### 0x6.4 컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+## 0x6.4 컴파일 래퍼 기반 클래스
 
-#### TorchCompileWrapperWithCustomDispatcher
+### TorchCompileWrapperWithCustomDispatcher
 
-관련 내용이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용
+이것이 데코레이터 시스템의 핵심 기반 클래스다.
 
 ```python
 class TorchCompileWrapperWithCustomDispatcher:
@@ -843,7 +841,7 @@ class TorchCompileWrapperWithCustomDispatcher:
         vllm_config = get_current_vllm_config()
         
         if compiled_callable is None:
-            # 기본컴파일관련 내용컴파일forward관련 내용
+            # 기본 컴파일 설정: forward 메서드를 컴파일
             backend = vllm_config.compilation_config.init_backend(vllm_config)
             options = None
             if backend == "inductor":
@@ -860,24 +858,24 @@ class TorchCompileWrapperWithCustomDispatcher:
         self.original_code_object = self.__class__.forward.__code__
         self.compiled_codes: list[CodeType] = []
         
-        # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용된다저장컴파일후의관련 내용
+        # 바이트코드 훅을 등록하여 컴파일된 바이트코드를 저장
         torch._dynamo.convert_frame.register_bytecode_hook(self.bytecode_hook)
         
-        # 관련 내용컴파일관련 내용여부관련 내용사용관련 내용스케줄링관련 내용
+        # 컴파일 레벨에 따라 커스텀 디스패처 사용 여부를 결정
         self.use_custom_dispatcher = compilation_level >= CompilationLevel.DYNAMO_ONCE
 ```
 
-#### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다와관련 내용지원
+### 바이트코드 훅과 디버깅 지원
 
 ```python
 def bytecode_hook(self, old_code: CodeType, new_code: CodeType):
-    """저장컴파일후의관련 내용사용된다관련 내용실행한다와관련 내용
+    """컴파일된 바이트코드를 저장하여 직접 실행과 디버깅에 사용한다"""
     if old_code is not self.original_code_object:
         return
     
     self.compiled_codes.append(new_code)
     
-    # 관련 내용지원：관련 내용계산관련 내용와관련 내용후의코드
+    # 디버깅 지원: 계산 그래프와 변환된 코드를 덤프
     debug_dump_dir = self.vllm_config.compilation_config.debug_dump_path
     if debug_dump_dir:
         rank = self.vllm_config.parallel_config.rank
@@ -894,25 +892,25 @@ def bytecode_hook(self, old_code: CodeType, new_code: CodeType):
 ```
 
 
-## 0x7. CUDA Graph관련 내용
+# 0x7. CUDA Graph 통합
 
-### 0x7.1 CUDA Graph모드
+## 0x7.1 CUDA Graph 모드
 
-vLLM Compilation지원많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)모드：
+vLLM Compilation은 여러 가지 CUDA Graph 모드를 지원한다.
 
 ```python
 class CUDAGraphMode(IntEnum):
     NONE = 0
-    PIECEWISE = 1  # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)모드，관련 내용이다우리는에서log중보다까지의PIECEWISE
-    FULL = 2       # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)모드
+    PIECEWISE = 1  # 분할 CUDA Graph 모드, 우리가 log에서 보게 되는 그 PIECEWISE다
+    FULL = 2       # 전체 그래프 CUDA Graph 모드
 ```
 
-`PIECEWISE`모드이다vLLM의관련 내용새，관련 내용에서prefill단계대해부분operator관련 내용사용CUDA Graph。로관련 내용의CUDA Graph때문에관련 내용의입력shape，에서prefill단계어렵다응용。관련 내용통해관련 내용컴파일，vLLM가능로할 것이다관련 내용대해입력관련 내용아니관련 내용의operator（이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (MLPlayer RMSNorm)와서，로관련 내용생성한다CUDA Graph，관련 내용할 것이다대해입력관련 내용의operator（주요이다Attention）관련 내용실행한다。
+`PIECEWISE` 모드는 vLLM의 혁신으로, prefill 단계에서 일부 연산자에 CUDA Graph를 사용할 수 있게 해 준다. 기존의 CUDA Graph는 고정된 입력 shape이 필요했기 때문에 prefill 단계에 적용하기 어려웠다. 하지만 분할 컴파일을 통해 vLLM은 입력 길이에 민감하지 않은 연산자(MLP 레이어, RMSNorm 등)를 따로 뽑아내어 그것들에 대해 CUDA Graph를 만들고, 입력 길이에 민감한 연산자(주로 Attention)는 동적 실행으로 남겨 둘 수 있다.
 
-에서관련 내용컴파일중，각개관련 내용모두가능로독립관련 내용사용CUDA Graph：
+분할 컴파일에서는 각 서브그래프가 독립적으로 CUDA Graph를 사용할 수 있다.
 
 ```python
-if self.compilation_config.cudagraph_mode!= CUDAGraphMode.NONE:
+if self.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
     static_graph_wrapper_class = resolve_obj_by_qualname(
         current_platform.get_static_graph_wrapper_cls())
     
@@ -926,17 +924,17 @@ if self.compilation_config.cudagraph_mode!= CUDAGraphMode.NONE:
             weak_ref_output=piecewise_backend.is_last_graph))
 ```
 
-여기관련 내용에서있다관련 내용많은，쓰기아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다가능로관련 내용보다여기의관련 내용https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py#L401
+여기는 세부 사항이 정말 많아서 더 쓰기는 어렵고, 관심이 있다면 여기 소스 코드를 직접 보면 된다: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py#L401
 
 
 ![](img/vllm-piecewise-cuda-graph-tech-study-notes-273c1e28/001.png)
 
 
-## 0x8. vLLM Compilation Pass관련 내용
+# 0x8. vLLM Compilation Pass 관리 시스템
 
-### 0x8.1 Pass이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+## 0x8.1 Pass 관리자 설계
 
-vLLM구현`PostGradPassManager`와서관련 내용있다의Pass：
+vLLM은 모든 Pass를 관리하기 위해 `PostGradPassManager`를 구현했다.
 
 ```python
 class PostGradPassManager(CustomGraphPass):
@@ -970,134 +968,134 @@ class PostGradPassManager(CustomGraphPass):
             if pass_.is_applicable_for_shape(shape):
                 pass_(graph)
         
-        # 관련 내용이다마지막으로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (rowfix_functionalization)
+        # fix_functionalization은 항상 마지막에 실행
         self.fix_functionalization(graph)
 ```
 
-### 0x8.2 Pass실행한다관련 내용
+## 0x8.2 Pass 실행 순서
 
-Pass의실행한다관련 내용이다관련 내용의：
+Pass의 실행 순서는 다음과 같다.
 
-1. NoOp이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Pass)
-2. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)그리고rowPass
-3. 관련 내용텐서그리고rowPass  
-4. 융합Pass（FusionPass, ActivationQuantFusionPass）
-5. attention융합Pass
-6. FlashInfer AllReduce융합Pass
-7. 함수관련 내용수정Pass（관련 내용이다마지막으로실행한다）
+1. NoOp 제거 Pass
+2. 시퀀스 병렬 Pass
+3. 비동기 텐서 병렬 Pass  
+4. 융합 Pass (FusionPass, ActivationQuantFusionPass)
+5. attention 융합 Pass
+6. FlashInfer AllReduce 융합 Pass
+7. 함수화 수정 Pass (항상 마지막에 실행)
 
-이이 부분은 원문의 해당 기술 설명을 이어서 서술한다있다Pass모두에서함수관련 내용의관련 내용상관련 내용여기만이다관련 내용소개，관련 내용의관련 내용가능로보다관련 내용https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py#L401
+이 순서는 모든 Pass가 함수화된 그래프 위에서 동작하도록 보장한다. 여기서는 간단히만 소개하며, 자세한 내용을 알고 싶다면 소스 코드를 보면 된다: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py#L401
 
-## 0x9. vLLM Compilation 성능관련 내용와관련 내용
+# 0x9. vLLM Compilation 성능 모니터링과 디버깅
 
-### 0x9.1 컴파일관련 내용
+## 0x9.1 컴파일 카운터
 
-vLLM구현관련 내용의컴파일집계：
+vLLM은 상세한 컴파일 통계를 구현하고 있다.
 
 ```python
 @dataclasses.dataclass
 class CompilationCounter:
-    num_models_seen: int = 0                      # 보다까지의모델개수
-    num_graphs_seen: int = 0                      # 보다까지의계산관련 내용개수
-    num_piecewise_graphs_seen: int = 0            # 관련 내용개수
-    num_piecewise_capturable_graphs_seen: int = 0 # 가능capture의관련 내용개수
-    num_inductor_compiles: int = 0                # Inductor컴파일관련 내용
-    num_backend_compilations: int = 0             # 후관련 내용컴파일관련 내용
-    num_eager_compiles: int = 0                   # Eager컴파일관련 내용
-    num_cache_entries_updated: int = 0            # cache관련 내용갱신관련 내용
-    num_compiled_artifacts_saved: int = 0         # 저장의컴파일관련 내용개수
+    num_models_seen: int = 0                      # 확인된 모델 수
+    num_graphs_seen: int = 0                      # 확인된 계산 그래프 수
+    num_piecewise_graphs_seen: int = 0            # 분할 그래프 수
+    num_piecewise_capturable_graphs_seen: int = 0 # capture 가능한 분할 그래프 수
+    num_inductor_compiles: int = 0                # Inductor 컴파일 횟수
+    num_backend_compilations: int = 0             # 백엔드 컴파일 횟수
+    num_eager_compiles: int = 0                   # Eager 컴파일 횟수
+    num_cache_entries_updated: int = 0            # 캐시 엔트리 갱신 횟수
+    num_compiled_artifacts_saved: int = 0         # 저장된 컴파일 산출물 수
 ```
 
-#### 사용 방법
+### 사용 방법
 
-**1. 관련 내용보다컴파일집계관련 내용**
+**1. 컴파일 통계 정보 확인**
 
 ```python
 from vllm.compilation.counter import compilation_counter
 
-# 에서모델관련 내용 (row)후관련 내용보다집계관련 내용
-print(f"컴파일의모델개수: {compilation_counter.num_models_seen}")
-print(f"관련 내용개수: {compilation_counter.num_piecewise_graphs_seen}")
-print(f"cache관련 내용중관련 내용 (:){compilation_counter.num_cache_entries_updated}")
+# 모델 실행 후 통계 정보를 확인
+print(f"컴파일된 모델 수: {compilation_counter.num_models_seen}")
+print(f"분할 그래프 수: {compilation_counter.num_piecewise_graphs_seen}")
+print(f"캐시 히트 상황: {compilation_counter.num_cache_entries_updated}")
 ```
 
-**2. 통해관련 내용변수관련 내용사용관련 내용**
+**2. 환경 변수로 상세 로그 활성화**
 
 ```bash
-# 관련 내용사용컴파일관련의관련 내용
+# 컴파일 관련 상세 로그 활성화
 export VLLM_LOGGING_LEVEL=DEBUG
 
-# 시작vLLM관련 내용
+# vLLM 서비스 기동
 python -m vllm.entrypoints.openai.api_server \
     --model meta-llama/Llama-2-7b-hf \
     --compilation-level 3
 ```
 
-**3. 관련 내용컴파일성능**
+**3. 컴파일 성능 모니터링**
 
-vLLM된다관련 내용기록컴파일관련 내용와cache관련 내용중관련 내용
+vLLM은 컴파일 시간과 캐시 히트 상황을 자동으로 기록한다.
 
 ```python
-# 에서관련 내용중볼 수 있다관련 내용출력
+# 로그에서 다음과 비슷한 출력을 볼 수 있다
 # INFO: Compiling graph for shape 16, took 45.2 s
 # INFO: Directly load compiled graph from cache, took 0.8 s
 # INFO: CUDA graph capture for shape 32, took 2.1 s
 ```
 
-### 0x9.2 관련 내용지원
+## 0x9.2 디버깅 지원
 
-vLLM Compilation관련 내용아니적은관련 내용가능，이 부분은 원문의 해당 기술 설명을 이어서 서술한다컴파일관련 내용와조사문제。
+vLLM Compilation은 개발자가 컴파일 과정을 이해하고 문제를 파악하기 쉽도록 여러 디버깅 기능을 제공한다.
 
-#### 관련 내용사용관련 내용
+### 디버그 덤프 활성화
 
-**1. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다목차**
+**1. 디버그 덤프 디렉터리 설정**
 
 ```bash
-# 통해관련 내용변수관련 내용
+# 환경 변수로 설정
 export VLLM_COMPILATION_DEBUG_DUMP_PATH="/tmp/vllm_debug"
 
-# 또는관련 내용에서시작관련 내용
+# 또는 기동 시에 지정
 python -m vllm.entrypoints.openai.api_server \
     --model meta-llama/Llama-2-7b-hf \
     --compilation-level 3 \
     --compilation-config '{"debug_dump_path": "/tmp/vllm_debug"}'
 ```
 
-**2. 관련 내용파일관련 내용**
+**2. 디버그 파일 구조**
 
-관련 내용사용관련 내용후，된다에서관련 내용목차생성한다로하파일：
+디버깅을 활성화하면 지정한 디렉터리에 다음 파일들이 생성된다.
 
 ```bash
 /tmp/vllm_debug/
 ├── rank_0/
-│   ├── transformed_code.py          # Dynamo관련 내용후의코드
-│   ├── computation_graph.py         # 계산관련 내용
-│   ├── inductor_output.py          # Inductor컴파일출력
-│   └── piecewise_graphs/           # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+│   ├── transformed_code.py          # Dynamo가 변환한 코드
+│   ├── computation_graph.py         # 계산 그래프 덤프
+│   ├── inductor_output.py          # Inductor 컴파일 출력
+│   └── piecewise_graphs/           # 분할 그래프 상세
 │       ├── subgraph_0.py
 │       ├── subgraph_1.py
-│       └──...
-└── compilation_stats.json          # 컴파일집계관련 내용
+│       └── ...
+└── compilation_stats.json          # 컴파일 통계 정보
 ```
 
 
-vLLM Compilation관련 내용컴파일관련 내용분석、이 부분은 원문의 해당 기술 설명을 이어서 서술한다성능분석관련 내용사용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다통해관련 내용변수이 부분은 원문의 해당 기술 설명을 이어서 서술한다컴파일、이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (cache)새컴파일、관련 내용사용관련 내용의CUDA Graph이 부분은 원문의 해당 기술 설명을 이어서 서술한다가능로통해관련 내용컴파일설정、관련 내용컴파일전후성능관련 내용조사문제와분석성능관련 내용
+vLLM Compilation은 컴파일 시간 분석, 메모리 모니터링 등의 성능 분석 도구도 제공한다. 자주 쓰이는 디버깅 기법으로는 환경 변수로 특정 서브그래프의 컴파일을 건너뛰기, 캐시를 지워 강제로 재컴파일하기, 상세한 CUDA Graph 디버그 로그 활성화하기 등이 있다. 개발자는 컴파일 설정을 점검하거나 컴파일 전후의 성능을 비교하는 방식으로 문제를 파악하고 성능 회귀를 분석할 수 있다.
 
-## 0x10. 정리
+# 0x10. 요약
 
-vLLM Compilation이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의주요관련 내용
+vLLM Compilation 모듈의 주요 특성은 다음과 같다.
 
-1. **관련 내용컴파일(PIECEWISE)**: 관련 내용이다vLLM관련 내용의관련 내용새，통해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)가능관련 내용응용까지prefill단계，대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Attention)의operator모두가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA Graph)와서의CPU Overhead줄인다。관련 내용이다우리는에서시작vLLM관련 내용보다까지`Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)`의관련 내용
-2. **operator융합**: 부터operator관련 내용까지관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operatorfuse)최적화
-3. **관련 내용가능cache**: 관련 내용많은관련 내용의cache관련 내용보장cache관련 내용
-4. **이 부분은 원문의 해당 기술 설명을 이어서 서술한다**: 관련 내용모델컴파일의사용관련 내용인터페이스
-5. **Pass관련 내용**: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의최적화Pass이 부분은 원문의 해당 기술 설명을 이어서 서술한다에서모델중관련 내용쓰기관련 내용의관련 내용코드
+1. **분할 컴파일(PIECEWISE)**: vLLM의 가장 핵심적인 혁신으로, 그래프 분할을 통해 CUDA Graph를 prefill 단계에도 적용할 수 있게 하여 Attention을 제외한 연산자들이 CUDA Graph가 가져다주는 CPU Overhead 감소를 누릴 수 있게 한다. vLLM을 띄울 때 보이는 `Capturing CUDA graphs (mixed prefill-decode, PIECEWISE)`가 바로 이 기술의 원리다
+2. **연산자 융합**: 연산자 수준부터 통신 수준까지 전방위적인 연산자 fuse 최적화
+3. **지능형 캐시**: 여러 요소를 고려한 캐시 키 설계로 캐시의 정확성을 보장
+4. **데코레이터 시스템**: 모델 컴파일을 단순화하는 사용자 인터페이스
+5. **Pass 관리**: 모듈화된 최적화 Pass 관리 시스템으로, 모델 안에 손으로 쓴 중복 코드를 반복해서 작성하지 않아도 된다
 
-PIECEWISE이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vLLM)에서prefill단계도가능관련 내용의성능향상，관련 내용의와서관련 내용기반으로Torch Compile，vLLM구현PIECEWISE CUDA Graph、operatorfuse、관련 내용가능cache、이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Pass)모델최적화더좋은관련 내용그리고관련 내용향상성능。
+PIECEWISE 기술 덕분에 vLLM은 prefill 단계에서도 뚜렷한 성능 향상을 얻을 수 있다. 전체적으로 보면 Torch Compile을 기반으로 vLLM은 PIECEWISE CUDA Graph, 연산자 fuse, 지능형 캐시, 데코레이터 시스템, Pass 관리 등의 특성을 구현했고, 이를 통해 모델 최적화를 더 잘 유지보수하면서 성능도 높였다.
 
-관련코드링크：
-- 컴파일후관련 내용구현：https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py
-- 컴파일관련 내용인터페이스：https://github.com/vllm-project/vllm/blob/main/vllm/compilation/compiler_interface.py  
-- 융합Pass구현：https://github.com/vllm-project/vllm/blob/main/vllm/compilation/fusion.py
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다https://github.com/vllm-project/vllm/blob/main/vllm/compilation/decorators.py
-- Pass관련 내용https://github.com/vllm-project/vllm/blob/main/vllm/compilation/pass_manager.py
+관련 코드 링크:
+- 컴파일 백엔드 구현: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/backends.py
+- 컴파일러 인터페이스: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/compiler_interface.py  
+- 융합 Pass 구현: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/fusion.py
+- 데코레이터 시스템: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/decorators.py
+- Pass 관리자: https://github.com/vllm-project/vllm/blob/main/vllm/compilation/pass_manager.py

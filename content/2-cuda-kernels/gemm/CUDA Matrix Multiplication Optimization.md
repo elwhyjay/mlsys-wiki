@@ -1,3 +1,5 @@
+> 블로그 출처: https://leimao.github.io/article/CUDA-Matrix-Multiplication-Optimization/ , Lei Mao 저자의 글이며 전재 허가를 받았다. 앞으로 Lei Mao 의 CUDA 관련 블로그를 몇 편 더 전재할 예정이며, 이는 하나의 완결된 시리즈이기도 하다. 다소 이른 시기의 CUDA 아키텍처부터 현재 최신 CUDA 아키텍처까지 다루며, 실용적인 엔지니어링 기법, 저수준 명령어 분석, Cutlass 분석 등 여러 주제를 포함하는, 시간 순서가 매우 명확한 시리즈이다.
+
 # CUDA 행렬 곱셈 최적화
 
 ## 소개
@@ -1943,7 +1945,7 @@ void launch_gemm_kernel_v07_vectorized(size_t m, size_t n, size_t k,
 
 우리가 GEMM CUDA 커널에 적용한 최적화는 주로 “CUTLASS: Fast Linear Algebra in CUDA C++”(https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda/)의 도표를 따른다.
 
-![](https://files.mdnice.com/user/59/5681a7ca-2fad-47d3-8068-c0f94e329955.png)
+![](img/blog-repost-cuda-matrix-multiplication-optimization-fdb2f40e/001.png)
 
 2D 블록 타일링, 2D warp 타일링, 2D 스레드 타일링, 벡터화 메모리 접근 등의 최적화 기법을 사용하면, NVIDIA GeForce RTX 3090 GPU 에서 20.16 TFLOPS 의 FP32 GEMM 성능을 달성할 수 있으며, 이는 cuBLAS FP32 GEMM 성능의 약 80% - 90% 에 해당한다.
 

@@ -12,6 +12,9 @@ Tri Dao
 
 논문: https://tridao.me/publications/flash2/flash2.pdf
 
+![FlashAttention-2](img/translation-flash-attention-usage-guide-41d63130/flashattention_logo.png)
+
+
 ## 사용 방법
 
 FlashAttention이 공개된 뒤 이렇게 짧은 시간 안에 널리 채택되는 것을 보게 되어 매우 기쁩니다. 이 [페이지](https://github.com/Dao-AILab/flash-attention/blob/main/usage.md)에는 FlashAttention이 사용되는 곳의 일부 목록이 담겨 있습니다.

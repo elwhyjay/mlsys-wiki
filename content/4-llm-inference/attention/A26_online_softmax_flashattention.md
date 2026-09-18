@@ -647,6 +647,12 @@ FP8 정밀도에서 FA3는 cuDNN보다 약간 못하지만(cuDNN 강력), block 
 
 본 글은 먼저 Online-Softmax 관점에서 3-pass Safe-Softmax, 2-pass Online-Softmax, 1-pass FlashAttention 원리를 짚었다. 이어 FlashAttention-1과 FlashAttention-2의 최적화 포인트, FlashAttention IO 복잡도 분석과 적용 시나리오, 분산 학습/추론에서의 활용을 자세히 다뤘다. 도해로 MQA/GQA와 Causal Mask 처리도 살펴봤고, 마지막으로 Memory-Efficient Attention의 기본 원리를 정리했다.
 
+저자의 더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)에서 확인할 수 있다. LLM/VLM 글 정리와 FlashAttention, SGEMM, HGEMM, GEMV 같은 대표 CUDA kernel 예제 구현을 포함하며, 누적 3k+ stars를 기록 중이다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
+
+늘 그렇듯, 오류는 발견 즉시 갱신하고 수정해 나가겠다.
 
 ## 참고
 

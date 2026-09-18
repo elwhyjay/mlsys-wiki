@@ -1,16 +1,16 @@
-> 블로그 출처：https://leimao.github.io/blog/CUDA-Vectorized-Memory-Access/ ，와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Lei Mao)후관련 내용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Lei Mao)의CUDA관련Blog，도이다관련 내용개완전한의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Blog)된다부터관련 내용의CUDA관련 내용까지현재관련 내용새의CUDA관련 내용도된다관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)분석，Cutlass분석관련 내용많은개관련 내용이다관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용
+> 블로그 출처: https://leimao.github.io/blog/CUDA-Vectorized-Memory-Access/ 이 글은 Lei Mao의 글이며, 저자의 전재 허가를 받았다. 앞으로도 Lei Mao의 CUDA 관련 블로그를 계속 전재할 예정이며, 이는 하나의 완결된 시리즈이기도 하다. 이 블로그는 다소 이전 세대의 CUDA 아키텍처부터 현재 최신 CUDA 아키텍처까지 다루고, 실용적인 엔지니어링 기법, 저수준 명령어 분석, Cutlass 분석 등 여러 주제를 포함하는, 시간 순서가 매우 뚜렷한 시리즈다.
 
-# CUDA vectorization관련 내용
+# CUDA 벡터화 메모리 접근
 
 ## 소개
 
-부터DRAM중읽기와쓰기관련 내용이다CUDA관련 내용중의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA)의있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA)함수성능관련 내용핵심의이 부분은 원문의 해당 기술 설명을 이어서 서술한다이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA)함수이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+DRAM에서 데이터를 읽고 쓰는 것은 CUDA 프로그래밍의 기본 연산 중 하나다. CUDA 디바이스의 유효 메모리 대역폭은 CUDA 함수의 성능을 좌우하는 가장 중요한 요인 중 하나이며, 특히 CUDA 함수가 memory bound일 때 그렇다.
 
-에서이 블로그 글관련 내용중，우리는할 것이다관련 내용통해관련 내용사용vectorization관련 내용와서높인다CUDA함수의있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이 블로그 글에서는 벡터화 메모리 접근을 사용해 CUDA 함수의 유효 메모리 대역폭을 높이는 방법을 보여준다.
 
-## CUDA vectorization관련 내용
+## CUDA 벡터화 메모리 접근
 
-에서아래의예제중，우리는할 것이다구현관련 내용개관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수，그리고관련 내용통해대해아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다의이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용각thread8관련 내용또는16관련 내용의vectorization관련 내용와서높인다관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용각thread8관련 내용또는16이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (vectorization)의결과이다줄인다이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용개수，관련 내용에서관련 내용있다사용관련 내용중모두가능높인다있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+아래 예제에서는 단순한 형태의 커스텀 device memcpy 함수를 구현하고, 여러 데이터 타입의 연속된 데이터에 대해 thread당 8바이트 또는 16바이트의 벡터화 메모리 트랜잭션을 사용함으로써 유효 메모리 대역폭을 어떻게 높일 수 있는지 보여준다. thread당 8바이트 또는 16바이트 벡터화 메모리 트랜잭션을 사용하면 데이터 복사에 필요한 메모리 트랜잭션 수가 줄어들고, 이는 거의 모든 사용 사례에서 유효 메모리 대역폭을 높여준다.
 
 ```c++
 #include <chrono>
@@ -22,12 +22,12 @@
 #include <vector>
 
 #include <cuda_runtime.h>
-// CUDA이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA API)호출한다의반환한다관련 내용
+// CUDA API 호출의 반환값을 검사하기 위한 CUDA 에러 체크 매크로
 #define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
 void check(cudaError_t err, const char* const func, const char* const file,
            const int line)
 {
-    if (err!= cudaSuccess)
+    if (err != cudaSuccess)
     {
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line
                   << std::endl;
@@ -36,12 +36,12 @@ void check(cudaError_t err, const char* const func, const char* const file,
     }
 }
 
-// 관련 내용마지막으로관련 내용개CUDA관련 내용의관련 내용
+// 마지막 CUDA 에러를 검사하는 매크로
 #define CHECK_LAST_CUDA_ERROR() check_last(__FILE__, __LINE__)
 void check_last(const char* const file, const int line)
 {
     cudaError_t const err{cudaGetLastError()};
-    if (err!= cudaSuccess)
+    if (err != cudaSuccess)
     {
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line
                   << std::endl;
@@ -50,12 +50,12 @@ void check_last(const char* const file, const int line)
     }
 }
 
-// 관련 내용중정렬함수，사용된다관련 내용출력
+// 출력 포맷팅에 사용하는 문자열 가운데 정렬 함수
 std::string std_string_centered(std::string const& s, size_t width,
                                 char pad = ' ')
 {
     size_t const l{s.length()};
-    // 만약관련 내용작은이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 폭이 너무 작으면 예외를 던진다
     if (width < l)
     {
         throw std::runtime_error("Width is too small.");
@@ -67,7 +67,7 @@ std::string std_string_centered(std::string const& s, size_t width,
     return s_centered;
 }
 
-// 성능관련 내용함수관련 내용사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA)함수의실행한다관련 내용
+// CUDA 함수의 실행 시간을 측정하기 위한 성능 측정 함수 템플릿
 template <class T>
 float measure_performance(std::function<T(cudaStream_t)> const& bound_function,
                           cudaStream_t stream, unsigned int num_repeats = 100,
@@ -76,11 +76,11 @@ float measure_performance(std::function<T(cudaStream_t)> const& bound_function,
     cudaEvent_t start, stop;
     float time;
 
-    // 생성한다CUDA관련 내용사용된다관련 내용
+    // 시간 측정을 위한 CUDA 이벤트 생성
     CHECK_CUDA_ERROR(cudaEventCreate(&start));
     CHECK_CUDA_ERROR(cudaEventCreate(&stop));
 
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row row)의overhead관련 내용결과
+    // 워밍업 실행, 첫 실행의 오버헤드가 측정 결과에 영향을 주지 않도록 한다
     for (unsigned int i{0U}; i < num_warmups; ++i)
     {
         bound_function(stream);
@@ -88,7 +88,7 @@ float measure_performance(std::function<T(cudaStream_t)> const& bound_function,
 
     CHECK_CUDA_ERROR(cudaStreamSynchronize(stream));
 
-    // 관련 내용그리고실행한다많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 계측을 시작하고 여러 번 반복 측정을 수행
     CHECK_CUDA_ERROR(cudaEventRecord(start, stream));
     for (unsigned int i{0U}; i < num_repeats; ++i)
     {
@@ -101,21 +101,21 @@ float measure_performance(std::function<T(cudaStream_t)> const& bound_function,
     CHECK_CUDA_ERROR(cudaEventDestroy(start));
     CHECK_CUDA_ERROR(cudaEventDestroy(stop));
 
-    // 계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (latency)
+    // 평균 레이턴시 계산
     float const latency{time / num_repeats};
 
     return latency;
 }
 
-// 관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수
-// 각개thread관련 내용개관련 내용
+// 기본적인 커스텀 device memcpy 커널 함수
+// 각 thread가 하나의 데이터 원소를 처리한다
 template <typename T>
 __global__ void custom_device_memcpy(T* __restrict__ output,
                                      T const* __restrict__ input, size_t n)
 {
-    // 계산현재thread의관련 내용인덱스
+    // 현재 thread의 전역 인덱스 계산
     size_t const idx{blockDim.x * blockIdx.x + threadIdx.x};
-    // 계산관련 내용사용된다관련 내용큰이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (thread)총수의관련 내용
+    // 전체 thread 수보다 큰 데이터를 처리하기 위한 grid stride 계산
     size_t const stride{blockDim.x * gridDim.x};
     for (size_t i{idx}; i < n; i += stride)
     {
@@ -123,13 +123,13 @@ __global__ void custom_device_memcpy(T* __restrict__ output,
     }
 }
 
-// 시작이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용함수
+// 기본 커스텀 device memcpy를 실행하는 래퍼 함수
 template <typename T>
 void launch_custom_device_memcpy(T* output, T const* input, size_t n,
                                  cudaStream_t stream)
 {
     dim3 const threads_per_block{1024};
-    // 계산관련 내용의block관련 내용보장아니관련 내용없음관련 내용의관련 내용큰관련 내용
+    // 필요한 block 수 계산, unsigned int의 최댓값을 넘지 않도록 한다
     dim3 const blocks_per_grid{static_cast<unsigned int>(std::min(
         (n + threads_per_block.x - 1U) / threads_per_block.x,
         static_cast<size_t>(std::numeric_limits<unsigned int>::max())))};
@@ -138,28 +138,28 @@ void launch_custom_device_memcpy(T* output, T const* input, size_t n,
     CHECK_LAST_CUDA_ERROR();
 }
 
-// 관련 내용사용shared memory관련 내용로중관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수
+// shared memory를 중간 버퍼로 사용하는 커스텀 device memcpy 커널 함수
 template <typename T, unsigned int BLOCK_DIM_X>
 __global__ void custom_device_memcpy_shared_memory(T* __restrict__ output,
                                                    T const* __restrict__ input,
                                                    size_t n)
 {
-    // 관련 내용사용shared memory관련 내용로중관련 내용
+    // shared memory를 중간 버퍼로 사용
     __shared__ T shared_memory[BLOCK_DIM_X];
     size_t const idx{blockDim.x * blockIdx.x + threadIdx.x};
     size_t const stride{blockDim.x * gridDim.x};
     for (size_t i{idx}; i < n; i += stride)
     {
-        // 관련 내용할 것이다관련 내용부터global memory읽기까지shared memory
+        // 먼저 global memory에서 shared memory로 데이터를 읽는다
         shared_memory[threadIdx.x] = input[i];
-        // 에서관련 내용하아니관련 내용왜냐하면각개thread만관련 내용의shared memory관련 내용
+        // 이 경우에는 각 thread가 자신의 shared memory 위치에만 접근하므로 동기화가 필요 없다
         // __syncthreads();
-        // 다시부터shared memory쓰기까지출력의global memory
+        // 다시 shared memory에서 출력 global memory로 쓴다
         output[i] = shared_memory[threadIdx.x];
     }
 }
 
-// 시작관련 내용사용shared memory의이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용함수
+// shared memory를 사용하는 커스텀 device memcpy를 실행하는 래퍼 함수
 template <typename T>
 void launch_custom_device_memcpy_shared_memory(T* output, T const* input,
                                                size_t n, cudaStream_t stream)
@@ -173,9 +173,9 @@ void launch_custom_device_memcpy_shared_memory(T* output, T const* input,
     CHECK_LAST_CUDA_ERROR();
 }
 
-// 최적화의이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수，관련 내용사용vectorization관련 내용
-// 관련 내용개thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (sizeof R)의관련 내용
-// 관련 내용개warp통해적은관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (32 x sizeof R)의관련 내용
+// 벡터화 메모리 접근을 사용하는 최적화된 커스텀 device memcpy 커널 함수
+// 하나의 thread가 sizeof(R)바이트의 데이터를 복사한다
+// 하나의 warp가 몇 번 되지 않는 메모리 트랜잭션으로 32 x sizeof(R)바이트의 데이터를 복사한다
 template <typename T, typename R = uint64_t>
 __global__ void custom_device_memcpy_optimized(T* __restrict__ output,
                                                T const* __restrict__ input,
@@ -183,19 +183,19 @@ __global__ void custom_device_memcpy_optimized(T* __restrict__ output,
 {
     size_t const idx{blockDim.x * blockIdx.x + threadIdx.x};
     size_t const stride{blockDim.x * gridDim.x};
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (R)의크기수행한다vectorization관련 내용
+    // R 타입의 크기에 맞춰 벡터화 접근을 수행
     for (size_t i{idx}; i * sizeof(R) / sizeof(T) < n; i += stride)
     {
-        // 관련 내용여부가능로완전한관련 내용개R크기의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)
+        // R 크기의 데이터 블록을 온전히 복사할 수 있는지 검사
         if ((i + 1U) * sizeof(R) / sizeof(T) < n)
         {
-            // 관련 내용사용vectorization이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (sizeof R)
+            // 벡터화 메모리 접근을 사용해 한 번에 sizeof(R)바이트를 복사
             reinterpret_cast<R*>(output)[i] =
                 reinterpret_cast<R const*>(input)[i];
         }
         else
         {
-            // 관련 내용의아니관련 내용개R크기의관련 내용
+            // R 크기에 미치지 못하는 나머지 데이터를 처리
             size_t const start_index{i * sizeof(R) / sizeof(T)};
             size_t const remaining_units_to_copy{(n - start_index)};
             for (size_t j{0}; j < remaining_units_to_copy; ++j)
@@ -206,13 +206,13 @@ __global__ void custom_device_memcpy_optimized(T* __restrict__ output,
     }
 }
 
-// 시작최적화의이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용함수
+// 최적화된 커스텀 device memcpy를 실행하는 래퍼 함수
 template <typename T, typename R = uint64_t>
 void launch_custom_device_memcpy_optimized(T* output, T const* input, size_t n,
                                            cudaStream_t stream)
 {
     dim3 const threads_per_block{1024};
-    // 계산관련 내용의R관련 내용개수（관련 내용상관련 내용
+    // 복사해야 할 R 타입 단위의 개수 계산(올림)
     size_t const num_units_to_copy_round_up{(n * sizeof(T) + sizeof(R) - 1U) /
                                             sizeof(R)};
     dim3 const blocks_per_grid{static_cast<unsigned int>(std::min(
@@ -224,7 +224,7 @@ void launch_custom_device_memcpy_optimized(T* output, T const* input, size_t n,
     CHECK_LAST_CUDA_ERROR();
 }
 
-// 관련 내용사용CUDA이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수의관련 내용함수
+// CUDA 공식 memcpy 함수를 사용하는 래퍼 함수
 template <typename T>
 void launch_official_device_memcpy(T* output, T const* input, size_t n,
                                    cudaStream_t stream)
@@ -233,7 +233,7 @@ void launch_official_device_memcpy(T* output, T const* input, size_t n,
                                      cudaMemcpyDeviceToDevice, stream));
 }
 
-// 초기화이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용인덱스
+// 데이터 단위의 값이 자신의 인덱스와 같아지도록 버퍼를 초기화
 template <typename T, std::enable_if_t<std::is_integral<T>::value, bool> = true>
 void initialize_buffer(T* buffer, size_t n)
 {
@@ -244,13 +244,13 @@ void initialize_buffer(T* buffer, size_t n)
     }
 }
 
-// 검증이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용
+// 버퍼 데이터의 정확성을 검증
 template <typename T, std::enable_if_t<std::is_integral<T>::value, bool> = true>
 void verify_buffer(T* buffer, size_t n)
 {
     for (size_t i{0}; i < n; ++i)
     {
-        if (buffer[i]!= static_cast<T>(i % static_cast<size_t>(
+        if (buffer[i] != static_cast<T>(i % static_cast<size_t>(
                                                 std::numeric_limits<T>::max())))
         {
             std::cerr << "Verification failed at index: " << i << std::endl;
@@ -259,8 +259,8 @@ void verify_buffer(T* buffer, size_t n)
     }
 }
 
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다성능의함수
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용개수、관련 내용사용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수로및관련 내용와관련 내용
+// 커스텀 device memcpy 성능을 측정하는 함수
+// 복사할 단위 개수, 사용할 device memcpy 함수, 그리고 반복 횟수와 워밍업 횟수를 받는다
 template <typename T>
 float measure_custom_device_memcpy_performance(
     size_t n,
@@ -271,41 +271,41 @@ float measure_custom_device_memcpy_performance(
     cudaStream_t stream;
     CHECK_CUDA_ERROR(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다의입력와출력관련 내용
+    // 호스트 측 입력 및 출력 버퍼 준비
     std::vector<T> input(n);
     std::vector<T> output(n, static_cast<T>(0));
     initialize_buffer(input.data(), n);
 
-    // 할당이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 디바이스 측 메모리 할당
     T* d_input;
     T* d_output;
 
     CHECK_CUDA_ERROR(cudaMalloc(&d_input, n * sizeof(T)));
     CHECK_CUDA_ERROR(cudaMalloc(&d_output, n * sizeof(T)));
 
-    // 할 것이다관련 내용부터관련 내용까지관련 내용
+    // 호스트에서 디바이스로 데이터 복사
     CHECK_CUDA_ERROR(cudaMemcpyAsync(d_input, input.data(), n * sizeof(T),
                                      cudaMemcpyHostToDevice, stream));
     CHECK_CUDA_ERROR(cudaMemcpyAsync(d_output, output.data(), n * sizeof(T),
                                      cudaMemcpyHostToDevice, stream));
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)로이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 정확성을 확인하기 위해 device memcpy를 한 번 실행
     device_memcpy_function(d_output, d_input, n, stream);
     CHECK_CUDA_ERROR(cudaMemcpyAsync(output.data(), d_output, n * sizeof(T),
                                      cudaMemcpyDeviceToHost, stream));
     CHECK_CUDA_ERROR(cudaStreamSynchronize(stream));
 
-    // 검증이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용
+    // device memcpy의 정확성 검증
     verify_buffer(output.data(), n);
 
-    // 계산관련 내용크기와성능관련 내용
+    // 데이터 크기와 성능 지표 계산
     size_t const num_bytes{n * sizeof(T)};
     float const num_giga_bytes{static_cast<float>(num_bytes) / (1 << 30)};
 
-    // 생성한다관련 내용함수사용된다성능관련 내용
+    // 성능 측정을 위한 바인딩 함수 생성
     std::function<void(cudaStream_t)> function{std::bind(
         device_memcpy_function, d_output, d_input, n, std::placeholders::_1)};
 
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (latency)그리고계산관련 내용
+    // 레이턴시를 측정하고 대역폭을 계산
     float const latency{
         measure_performance(function, stream, num_repeats, num_warmups)};
     std::cout << std::fixed << std::setprecision(3) << "Latency: " << latency
@@ -314,13 +314,13 @@ float measure_custom_device_memcpy_performance(
               << 2.f * num_giga_bytes / (latency / 1000) << " GB/s"
               << std::endl;
 
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 디바이스 메모리 정리
     CHECK_CUDA_ERROR(cudaFree(d_input));
     CHECK_CUDA_ERROR(cudaFree(d_output));
 
     CHECK_CUDA_ERROR(cudaStreamDestroy(stream));
 
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다와이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 디바이스 이름과 최대 메모리 대역폭 조회
     int device_id{0};
     cudaGetDevice(&device_id);
     cudaDeviceProp device_prop;
@@ -373,7 +373,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -422,7 +422,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -475,7 +475,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -530,7 +530,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -583,7 +583,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -636,7 +636,7 @@ int main()
               << std::endl;
     std::cout << std_string_centered("", string_width, '*') << std::endl;
 
-    for (size_t tensor_size:
+    for (size_t tensor_size :
          {tensor_size_small, tensor_size_medium, tensor_size_large})
     {
         std::string const tensor_size_string{std::string("Tensor Size: ") +
@@ -684,11 +684,11 @@ int main()
 }
 ```
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CUDA)에서관련 내용있다CUDA 12.0의NVIDIA RTX 3090 GPU상수행한다컴파일와성능분석。
+이 CUDA 프로그램은 CUDA 12.0이 설치된 NVIDIA RTX 3090 GPU에서 컴파일하고 성능을 측정했다.
 
 ```shell
 $ nvcc memcpy.cu -o memcpy -std=c++14
-$./memcpy
+$ ./memcpy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
               NVIDIA GPU Device Info
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1209,14 +1209,14 @@ Percentage of Peak Bandwitdh: 83.710%
 
 ## 결론
 
-부터결과중우리는가능로보다관련 내용
+결과로부터 다음을 알 수 있다.
 
-- 우리는관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다많은，있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다높은。
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다큰，있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다높은。
-- 에서큰많은관련 내용하，로8관련 내용또는16관련 내용의vectorization이 부분은 원문의 해당 기술 설명을 이어서 서술한다가능로높인다이 부분은 원문의 해당 기술 설명을 이어서 서술한다의있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다작은관련 내용
-- 관련 내용사용shared memory와서높인다이 부분은 원문의 해당 기술 설명을 이어서 서술한다의있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다의효과그리고아니관련 내용
+- 복사하는 데이터 단위가 많을수록 유효 메모리 대역폭이 높아진다.
+- 데이터 단위가 클수록 유효 메모리 대역폭이 높아진다.
+- 대부분의 경우 8바이트 또는 16바이트의 벡터화 단위로 데이터를 복사하면 커스텀 device memcpy의 유효 메모리 대역폭을 높일 수 있으며, 특히 데이터 단위가 작을 때 그렇다.
+- shared memory를 사용해 커스텀 device memcpy의 유효 메모리 대역폭을 높이는 효과는 뚜렷하지 않다.
 
-관련 내용주의，관련 내용우리는가능로에서이사용관련 내용중관련 내용사용CUDA관련 내용의관련 내용함수，이 부분은 원문의 해당 기술 설명을 이어서 서술한다쓰기와이 부분은 원문의 해당 기술 설명을 이어서 서술한다함수관련 내용있다관련 내용왜냐하면에서더관련 내용의CUDA응용중，관련 내용의관련 내용가능가능에서관련 내용중아니이다관련 내용의，우리는가능가능관련 내용부터많은개이 부분은 원문의 해당 기술 설명을 이어서 서술한다까지많은개관련 내용
+다만 이 사용 사례에서는 CUDA 공식 memcpy 함수를 그대로 사용할 수 있음에도, 커스텀 device memcpy 함수를 작성하고 개선하는 방법을 아는 것은 여전히 가치가 있다는 점에 유의하자. 더 현실적인 CUDA 애플리케이션에서는 복사할 데이터가 메모리상에서 연속적이지 않을 수 있고, 여러 소스에서 여러 목적지로 데이터를 복사해야 할 수도 있기 때문이다.
 
 ## 참고 자료
 - CUDA Pro Tip: Increase Performance with Vectorized Memory Access(https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)

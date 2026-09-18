@@ -17,6 +17,8 @@
 
 더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
 
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
 
 최근 Microsoft가 YOCO(You Only Cache Once, RetNet과 같은 저자로 보입니다)라는 논문을 발표했습니다. KV Cache를 레이어 간에 공유하는 새로운 아이디어입니다. 같은 시기에 MIT-IBM Watson AI Lab도 유사한 논문을 냈고, CLA(Cross-Layer Attention), 즉 KV Cache의 cross-layer 추론을 제안했습니다. YOCO와 거의 같은 방향이라, 이 글에서는 두 논문의 읽기 노트를 함께 정리합니다.
 
@@ -225,6 +227,17 @@ YOCO와 CLA의 전체 구조와 아이디어를 이해했다면 MLKV도 쉽게 �
 
 이 글에서는 KV Cache 공유 알고리즘 몇 가지를 간단히 분석했습니다. MQA, GQA, YOCO, CLA, MLKV를 살펴보았고, 이를 레이어 내부 공유와 레이어 간 공유라는 두 방식으로 정리했습니다. 또한 GQA, YOCO, CLA, MLKV의 KV Cache 계산식도 함께 정리했습니다. 좋은 기억력보다 짧은 기록이 더 낫다는 말이 있습니다.
 
+마지막으로 LLM 추론 배포 각 방향의 최신 진전은 제가 정리한 Awesome-LLM-Inference를 추천합니다. 링크: https://github.com/xlite-dev/Awesome-LLM-Inference
+
+![](images/v2-947f5839ce17eaa172e0bed862d1e3a9_1440w.png)
+*Awesome-LLM-Inference*
+
+더 많은 기술 노트와 CUDA 학습 노트는 LeetCUDA(CUDA Learn Notes with PyTorch)를 참고해 주세요. LeetCUDA에는 **LLM/VLM** 글 정리와 **FlashAttention, SGEMM, HGEMM, GEMV** 등 흔히 쓰이는 **CUDA Kernel**의 **예제 구현**이 포함되어 있으며, 현재 누적 **3k+ stars**를 달성했습니다. 링크: https://github.com/xlite-dev/LeetCUDA
+
+![](images/v2-cae076e970b2cec6399017ceed59e24a_1440w.png)
+*CUDA Learn Notes with PyTorch*
+
+늘 그렇듯 먼저 업데이트하고, 이후 수정할 부분이 있으면 계속 고치겠습니다.
 
 ### 참고 문헌
 

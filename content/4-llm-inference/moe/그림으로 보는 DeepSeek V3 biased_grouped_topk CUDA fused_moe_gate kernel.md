@@ -1,123 +1,121 @@
-# 그림으로 보는 DeepSeek V3 biased_grouped_topk CUDA fused_moe_gate kernel
+# 0x0. 서론
 
-## 0x0. 머리말
-
-관련 내용소개관련 내용개에서SGLang중대상으로DeepSeek V3모델중의 https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/moe/topk.py#L99-L149 부분의 `biased_grouped_topk` 함수의kernel최적화，에서DeepSeek V3end-to-end테스트중throughput향상5%로상。이함수사용된다DeepSeek V3/R1모델중의MOElayer，사용된다계산각개token의expert선택확률。와 비교하면Mixtral，Qwen2관련 내용 (MoE)모델의topk구현，DeepSeek V3이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (grouped_topk)의관련 내용각개token만가능선택관련 내용개수의expert관련 내용그다음각개expert관련 내용다시선택topk개expert。아래이다이함수의관련 내용
+오늘은 SGLang에서 DeepSeek V3 모델의 https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/moe/topk.py#L99-L149 부분에 있는 `biased_grouped_topk` 함수에 대한 kernel 최적화를 소개한다. DeepSeek V3 end-to-end 테스트에서 처리량이 5% 이상 향상되었다. 이 함수는 DeepSeek V3/R1 모델의 MOE 레이어에서 각 token의 expert 선택 확률을 계산하는 데 사용된다. Mixtral, Qwen2 등 MoE 모델의 topk 구현과 비교하면, DeepSeek V3는 grouped_topk 메커니즘을 도입해서 각 token이 고정된 개수의 expert group만 선택할 수 있게 하고, 그다음 각 expert group 안에서 다시 topk개의 expert를 선택한다. 아래는 이 함수에 주석을 단 것이다:
 
 
 ```python3
-# 입력텐서차원설명：
-# hidden_states: [num_token,...]  # 관련 내용차원관련 내용모델관련 내용
-# gating_output: [num_token, num_experts]  # num_experts반드시가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_expert_group)
-# correction_bias: [num_experts]  # 사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (gating)출력의bias관련 내용
-# 여기서：
-# - num_token: batch중의token개수
-# - num_experts: expert총수，반드시가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_expert_group)
-# - num_expert_group: expert관련 내용의개수
-# - topk: 각개token관련 내용선택의expert개수
-# - topk_group: 각개token관련 내용선택의expert관련 내용개수
-# 제약 조건：
+# 입력 텐서 차원 설명:
+# hidden_states: [num_token, ...]  # 나머지 차원은 모델 아키텍처에 따라 달라진다
+# gating_output: [num_token, num_experts]  # num_experts는 num_expert_group으로 나누어떨어져야 한다
+# correction_bias: [num_experts]  # gating 출력을 보정하는 bias 항
+# 여기서:
+# - num_token: 배치 안의 token 수
+# - num_experts: 전체 expert 수, num_expert_group으로 나누어떨어져야 한다
+# - num_expert_group: expert group의 개수
+# - topk: 각 token이 선택할 expert 수
+# - topk_group: 각 token이 선택할 expert group 수
+# 제약 조건:
 # - topk_group <= num_expert_group
 # - topk <= num_experts
 # - num_experts % num_expert_group == 0
 
 def biased_grouped_topk_impl(
-    hidden_states: torch.Tensor,      # 입력의hidden state텐서
-    gating_output: torch.Tensor,      # gating관련 내용의출력，사용된다계산expert선택확률
-    correction_bias: torch.Tensor,    # 사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (gating)출력의bias관련 내용
-    topk: int,                        # 각개token선택의expert개수
-    renormalize: bool,                # 여부대해선택의expertweight수행한다관련 내용새정규화
-    num_expert_group: int = 0,        # expert관련 내용의개수
-    topk_group: int = 0,              # 각개token선택의expert관련 내용개수
+    hidden_states: torch.Tensor,      # 입력 hidden state 텐서
+    gating_output: torch.Tensor,      # gating 네트워크의 출력, expert 선택 확률 계산에 사용
+    correction_bias: torch.Tensor,    # gating 출력을 보정하는 bias 항
+    topk: int,                        # 각 token이 선택하는 expert 수
+    renormalize: bool,                # 선택된 expert 가중치를 재정규화할지 여부
+    num_expert_group: int = 0,        # expert group의 개수
+    topk_group: int = 0,              # 각 token이 선택하는 expert group 수
 ):
-    # 보장입력token개수관련 내용
+    # 입력 token 수가 일치하는지 확인
     assert hidden_states.shape[0] == gating_output.shape[0], "Number of tokens mismatch"
 
-    # 대해gating출력수행한다sigmoid관련 내용까지expert선택확률
+    # gating 출력에 sigmoid 활성화를 적용해 expert 선택 확률을 얻는다
     scores = gating_output.sigmoid()
-    num_token = scores.shape[0]       # 얻는다token개수
-    num_experts = scores.shape[1]     # 얻는다expert총수
+    num_token = scores.shape[0]       # token 수 획득
+    num_experts = scores.shape[1]     # 전체 expert 수 획득
     
-    # 할 것이다scores관련 내용그리고추가이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (bias)
+    # scores를 reshape하고 보정 bias를 더한다
     scores_for_choice = scores.view(num_token, -1) + correction_bias.unsqueeze(0)
     
-    # 계산각개expert관련 내용의score：
-    # 1. 할 것이다scores관련 내용로[num_token, num_expert_group, experts_per_group]
-    # 2. 에서각개관련 내용선택top2의score
-    # 3. 대해각개관련 내용의top2score관련 내용와，관련 내용까지이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)
+    # 각 expert group의 점수 계산:
+    # 1. scores를 [num_token, num_expert_group, experts_per_group] 형태로 reshape
+    # 2. 각 group 안에서 top2 점수를 선택
+    # 3. 각 group의 top2 점수를 더해 group 점수를 얻는다
     group_scores = (
         scores_for_choice.view(num_token, num_expert_group, -1)
-.topk(2, dim=-1)[0]
-.sum(dim=-1)
+        .topk(2, dim=-1)[0]
+        .sum(dim=-1)
     )  # [n, n_group]
     
-    # 선택score관련 내용높은의topk_group개expert관련 내용
+    # 점수가 가장 높은 topk_group개의 expert group을 선택
     group_idx = torch.topk(group_scores, k=topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
     
-    # 생성한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)중의관련 내용
+    # group mask를 만들어 선택된 group을 표시
     group_mask = torch.zeros_like(group_scores)  # [n, n_group]
     group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
     
-    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)까지expert관련 내용
+    # group mask를 expert 단위로 확장
     score_mask = (
         group_mask.unsqueeze(-1)
-.expand(num_token, num_expert_group, scores.shape[-1] // num_expert_group)
-.reshape(num_token, -1)
+        .expand(num_token, num_expert_group, scores.shape[-1] // num_expert_group)
+        .reshape(num_token, -1)
     )  # [n, e]
     
-    # 할 것이다관련 내용중관련 내용의expertscore관련 내용로관련 내용없음관련 내용
+    # 선택되지 않은 group의 expert 점수를 음의 무한대로 설정
     tmp_scores = scores_for_choice.masked_fill(
         ~score_mask.bool(), float("-inf")
     )  # [n, e]
     
-    # 에서관련 내용중의expert관련 내용중선택topk개expert
+    # 선택된 expert group 안에서 topk개의 expert를 선택
     _, topk_ids = torch.topk(tmp_scores, k=topk, dim=-1, sorted=False)
-    # 얻는다관련 내용중expert의원본score관련 내용로weight
+    # 선택된 expert의 원래 점수를 가중치로 가져온다
     topk_weights = scores.gather(1, topk_ids)
 
-    # 만약관련 내용새정규화，대해관련 내용중의expertweight수행한다정규화관련 내용
+    # 재정규화가 필요하면 선택된 expert 가중치를 정규화한다
     if renormalize:
         topk_weights_sum = topk_weights.sum(dim=-1, keepdim=True)
         topk_weights = topk_weights / topk_weights_sum
 
-    # 반환한다정규화후의weight와관련 내용중의expertID
+    # 정규화된 가중치와 선택된 expert ID를 반환
     return topk_weights.to(torch.float32), topk_ids.to(torch.int32)
 
 
 ```
 
-없음관련 내용이다vLLM관련 내용이다SGLang모두이다통해torch.compile와서대해이함수수행한다최적화，관련 내용사용torch.compile의이 부분은 원문의 해당 기술 설명을 이어서 서술한다이다시작관련 내용의관련 내용큰큰관련 내용그리고이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (torch.compile)최적화후의성능와 비교하면관련 내용사용CUDA구현관련 내용이다있다관련 내용의차이관련 내용왜냐하면관련 내용및까지topk와gather관련 내용의operator，그리고아니가능대해이operator하다관련 내용의fuse 。관련 내용할 것이다소개관련 내용하 SGLang 중대상으로이함수의CUDA kernel fuse구현，PR로：https://github.com/sgl-project/sglang/pull/4530 。
+vLLM이든 SGLang이든 모두 torch.compile을 통해 이 함수를 최적화한다. torch.compile을 사용할 때의 명백한 단점은 서비스 기동 시간이 크게 길어진다는 것이고, 게다가 torch.compile로 최적화한 성능은 CUDA로 직접 구현한 것과 비교하면 여전히 어느 정도 차이가 있다. topk와 gather 같은 복잡한 operator가 얽혀 있어서 이 연산을 완전히 fuse할 수 없기 때문이다. 이 블로그에서는 SGLang에서 이 함수를 대상으로 한 CUDA kernel fuse 구현을 소개한다. PR은 https://github.com/sgl-project/sglang/pull/4530 이다.
 
-## 0x1. 성능테스트
+# 0x1. 성능 테스트
 
-### kernel PR의테스트 (https://github.com/sgl-project/sglang/pull/4530)
+## kernel PR의 테스트 (https://github.com/sgl-project/sglang/pull/4530)
 
 ![](img/deepseek-v3-biased-grouped-topk-cuda-fused-moe-gate-kernel-a9b0d740/001.png)
 
-여기의`seq_length`관련 내용이다위의`num_tokens`，관련 내용`bs=1`。부터여기의결과와서보다，에서아니관련 내용의token관련 내용하，CUDA kernel fuse후의성능와 비교하면`torch.compile`의버전모두있다개수관련 내용의관련 내용
+여기서 `seq_length`는 위의 `num_tokens`에 해당하며, `bs=1`이라고 가정한다. 이 결과를 보면 서로 다른 token 수에서 CUDA kernel fuse 후의 성능이 `torch.compile` 버전에 비해 모두 자릿수 단위로 앞선다.
 
-아래의테스트와서관련 내용https://github.com/sgl-project/sglang/pull/5371
+아래 테스트는 다음에서 가져왔다: https://github.com/sgl-project/sglang/pull/5371
 
-### torch profile
+## torch profile
 
 ```shell
 python3 -m sglang.bench_serving --backend sglang --num-prompts 2 --request-rate 1 --port 30001 --flush-cache --warmup-requests 1 --profile
 ```
 
-#### 관련 내용
+### 메인 브랜치
 
 ![](img/deepseek-v3-biased-grouped-topk-cuda-fused-moe-gate-kernel-a9b0d740/002.png)
 
-#### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (moe_fused_gate kernel)후의관련 내용
+### moe_fused_gate kernel로 교체한 브랜치
 
 ![](img/deepseek-v3-biased-grouped-topk-cuda-fused-moe-gate-kernel-a9b0d740/003.png)
 
 
-관련 내용에서만있다관련 내용개kernel。
+이제 kernel이 하나뿐이다.
 
 36us->8us.
 
-### 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (moe_fused_gate kernel)후의DeepSeek V3모델H200end-to-end테스트
+## moe_fused_gate kernel로 교체한 뒤 DeepSeek V3 모델의 H200 end-to-end 테스트
 
 
 ```shell
@@ -140,42 +138,42 @@ python3 -m sglang.bench_serving --backend sglang --num-prompts 300 --request-rat
 - qps=16: 8.1%+
 
 
-## 0x2. moe_fused_gate kernel 관련 내용읽다
+# 0x2. moe_fused_gate kernel 코드 리딩
 
-코드링크：https://github.com/sgl-project/sglang/blob/main/sgl-kernel/csrc/moe/moe_fused_gate.cu
+코드 링크: https://github.com/sgl-project/sglang/blob/main/sgl-kernel/csrc/moe/moe_fused_gate.cu
 
-### 0x2.1 Host관련 내용코드와thread모델
+## 0x2.1 Host 측 코드와 스레드 모델
 
 ```c++
 //------------------------------------------------------------------------------
-// Host관련 내용시작함수
+// Host 측 launch 함수
 //------------------------------------------------------------------------------
 std::vector<at::Tensor>
 moe_fused_gate(at::Tensor& input, at::Tensor& bias, int64_t num_expert_group, int64_t topk_group, int64_t topk) {
-  // 얻는다입력텐서의차원관련 내용
-  int64_t num_rows = input.size(0);    // token개수
-  int32_t num_experts = input.size(1); // expert총수
+  // 입력 텐서의 차원 정보를 가져온다
+  int64_t num_rows = input.size(0);    // token 수
+  int32_t num_experts = input.size(1); // 전체 expert 수
   
-  // 생성한다출력텐서，사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight)와인덱스
+  // 가중치와 인덱스를 저장할 출력 텐서 생성
   auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-  auto output = torch::empty({num_rows, topk}, options);           // 관련 내용중의expertweight
-  auto indices = torch::empty({num_rows, topk}, options.dtype(torch::kInt32)); // 관련 내용중의expert인덱스
+  auto output = torch::empty({num_rows, topk}, options);           // 선택된 expert 가중치를 저장
+  auto indices = torch::empty({num_rows, topk}, options.dtype(torch::kInt32)); // 선택된 expert 인덱스를 저장
 
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_expert_group)계산관련 내용차원
-  // 각개warp관련 내용의row이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (= max WARP_SIZE / num_expert_group), 1)
+  // num_expert_group에 따라 grid 차원을 계산
+  // 각 warp가 처리하는 행 수 = max(WARP_SIZE / num_expert_group, 1)
   int64_t rows_per_warp = std::max<int64_t>(1, WARP_SIZE / num_expert_group);
-  int64_t num_warps = (num_rows + rows_per_warp - 1) / rows_per_warp;  // 관련 내용의warp개수
-  int64_t num_blocks = (num_warps + WARPS_PER_CTA - 1) / WARPS_PER_CTA; // 관련 내용의block개수
+  int64_t num_warps = (num_rows + rows_per_warp - 1) / rows_per_warp;  // 필요한 warp 수
+  int64_t num_blocks = (num_warps + WARPS_PER_CTA - 1) / WARPS_PER_CTA; // 필요한 block 수
   
-  // 얻는다현재CUDA관련 내용
+  // 현재 CUDA stream을 가져온다
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)차원：각개block이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (WARPS_PER_CTA)* WARP_SIZE개thread，WARPS_PER_CTA개warp
+  // block 차원 설정: 각 block은 WARPS_PER_CTA * WARP_SIZE개의 스레드, 즉 WARPS_PER_CTA개의 warp를 포함한다
   dim3 block_dim(WARP_SIZE, WARPS_PER_CTA);
 
-  // 관련 내용 (1)보장expert개수이다2의관련 내용
+  // 검사 1: expert 수가 2의 거듭제곱인지 확인
   TORCH_CHECK((num_experts & (num_experts - 1)) == 0, "num_experts must be a power of 2, but got ", num_experts);
 
-  // 관련 내용 (2)보장expert개수가능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)개수관련 내용도이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)개수반드시이다2의관련 내용
+  // 검사 2: expert 수가 expert group 수로 나누어떨어지는지 확인(이는 expert group 수도 2의 거듭제곱이어야 함을 뜻한다)
   TORCH_CHECK(
       num_experts % num_expert_group == 0,
       "num_experts must be divisible by num_expert_group, but got ",
@@ -183,10 +181,10 @@ moe_fused_gate(at::Tensor& input, at::Tensor& bias, int64_t num_expert_group, in
       " / ",
       num_expert_group);
 
-  // 계산각개관련 내용의expert개수
+  // 각 group 안의 expert 수를 계산
   int computed_vpt = num_experts / num_expert_group;
-  // 관련 내용 (3)보장각개관련 내용의expert개수아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (MAX_VPT=32)
-  // MAX_VPT관련 내용각개thread가능관련 내용의관련 내용큰관련 내용
+  // 검사 3: 각 group 안의 expert 수가 MAX_VPT=32를 넘지 않는지 확인
+  // MAX_VPT는 각 스레드가 처리할 수 있는 최대값을 뜻한다
   TORCH_CHECK(
       computed_vpt <= MAX_VPT,
       "Per group experts: num_experts / num_expert_group = (",
@@ -195,16 +193,16 @@ moe_fused_gate(at::Tensor& input, at::Tensor& bias, int64_t num_expert_group, in
       MAX_VPT,
       ")");
 
-  // 관련 내용의컴파일관련 내용설정관련 내용까지관련 내용의kernel
-  // 현재관련 내용지원로하관련 내용
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1 256)개expert，8또는16개관련 내용
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (2 128)개expert，4또는8개관련 내용
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (3 8 <= num_experts / num_expert_group <= 32)
+  // 이미 알려진 컴파일 타임 설정에 따라 템플릿화된 kernel로 dispatch한다
+  // 현재는 다음 경우만 지원한다:
+  // 경우 1: expert 256개, group 8개 또는 16개
+  // 경우 2: expert 128개, group 4개 또는 8개
+  // 경우 3: 그 밖의 경우, 8 <= num_experts / num_expert_group <= 32 를 요구한다
   bool dispatched = false;
   switch (num_experts) {
     case 256:
       if (num_expert_group == 8)
-        // DeepSeek V3의관련 내용
+        // DeepSeek V3의 경우
         // VPT = 256/8 = 32, ROWS_PER_WARP = 32/8 = 4, ROWS_PER_CTA = 6 * 4 = 24
         if (input.scalar_type() == at::kBFloat16) {
           LAUNCH_MOE_GATE_CONFIG(bfloat16_t, 256, 8);
@@ -245,8 +243,8 @@ moe_fused_gate(at::Tensor& input, at::Tensor& bias, int64_t num_expert_group, in
       break;
   }
   
-  // 만약관련 내용있다관련 내용까지관련 내용의설정，관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)
-  // 현재이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)지원num_experts / num_expert_group <= 32의관련 내용
+  // 미리 정의된 설정에 매칭되지 않으면 동적 kernel을 사용한다
+  // 현재 동적 kernel은 num_experts / num_expert_group <= 32인 경우만 지원한다
   if (!dispatched) {
     if (input.scalar_type() == at::kBFloat16) {
       moe_fused_gate_kernel_dynamic<bfloat16_t><<<num_blocks, block_dim, 0, stream>>>(
@@ -289,110 +287,110 @@ moe_fused_gate(at::Tensor& input, at::Tensor& bias, int64_t num_expert_group, in
 }
 ```
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Host)의코드로및kernel관련 내용의관련 내용우리는가능로관련 내용와서thread모델。
+Host 측 코드와 kernel 앞부분에 정의된 주석을 바탕으로 스레드 모델을 그려볼 수 있다.
 
 ```c++
-static constexpr int WARP_SIZE = 32;  // 각개warp관련 내용 (32)개thread
-static constexpr int WARPS_PER_CTA = 6;  // 각개block있다6개warp
+static constexpr int WARP_SIZE = 32;  // 각 warp는 32개 스레드로 고정
+static constexpr int WARPS_PER_CTA = 6;  // 각 block에는 6개의 warp가 있다
 
-dim3 block_dim(WARP_SIZE, WARPS_PER_CTA);  // block차원로(32, 6)
-int64_t rows_per_warp = std::max<int64_t>(1, WARP_SIZE / num_expert_group);  // 각개warp관련 내용의row관련 내용
-int64_t num_warps = (num_rows + rows_per_warp - 1) / rows_per_warp;  // 관련 내용의warp관련 내용
-int64_t num_blocks = (num_warps + WARPS_PER_CTA - 1) / WARPS_PER_CTA;  // 관련 내용의block관련 내용
+dim3 block_dim(WARP_SIZE, WARPS_PER_CTA);  // block 차원은 (32, 6)
+int64_t rows_per_warp = std::max<int64_t>(1, WARP_SIZE / num_expert_group);  // 각 warp가 처리하는 행 수
+int64_t num_warps = (num_rows + rows_per_warp - 1) / rows_per_warp;  // 전체적으로 필요한 warp 수
+int64_t num_blocks = (num_warps + WARPS_PER_CTA - 1) / WARPS_PER_CTA;  // 필요한 block 수
 ```
 
-thread모델관련 내용로：
+스레드 모델을 표현하면 다음과 같다:
 
 ```c++
-Grid관련 내용 (:)
+Grid 구조:
 +------------------------+
 |  Block 0   Block 1    |  
 |  +------+  +------+   |
 |  |      |  |      |   |
-|  |      |  |      |   |... 더많은Block
-|  |      |  |      |   |  (num_blocks개Block)
+|  |      |  |      |   |   ... 더 많은 Block
+|  |      |  |      |   |  (num_blocks개의 Block)
 |  +------+  +------+   |
 |                       |
 +------------------------+
 
-Block이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (dim3 32),6)):
+Block 구조(dim3(32,6)):
 +--------------------------------+
-|  Warp 0  (32개thread)            |
+|  Warp 0  (32개 스레드)         |
 |  +----------------------------+ |
-|  |t0 t1 t2... t31          | |
+|  |t0 t1 t2 ... t31          | |
 |  +----------------------------+ |
 |  Warp 1                        |
 |  +----------------------------+ |
-|  |t32 t33 t34... t63       | |
+|  |t32 t33 t34 ... t63       | |
 |  +----------------------------+ |
-|...                  |
+|           ...                  |
 |  Warp 5                        |
 |  +----------------------------+ |
-|  |t160 t161... t191        | |
+|  |t160 t161 ... t191        | |
 |  +----------------------------+ |
 +--------------------------------+
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (:)
-- 각개Block이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (ROWS_PER_CTA = WARPS_PER_CTA)* ROWS_PER_WARP row관련 내용
-- 각개Warp이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (ROWS_PER_WARP = WARP_SIZE/num_expert_group row)
-- 각개thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (VPT = num_experts/num_expert_group)개expert（각개thread관련 내용개group관련 내용의experts_per_group개expert）
+데이터 처리 매핑:
+- 각 Block은 ROWS_PER_CTA = WARPS_PER_CTA * ROWS_PER_WARP 행의 데이터를 처리한다
+- 각 Warp는 ROWS_PER_WARP = WARP_SIZE/num_expert_group 행의 데이터를 처리한다
+- 각 스레드는 VPT = num_experts/num_expert_group 개의 expert를 처리한다(각 스레드가 한 group 안의 experts_per_group개 expert를 처리한다)
 ```
 
-로DeepSeek V3로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_experts=256), num_expert_group=8)：
-- VPT = 256/8 = 32：각개thread관련 내용 (32)개expert
-- ROWS_PER_WARP = 32/8 = 4：각개warp이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (4row)
-- ROWS_PER_CTA = 6 * 4 = 24：각개block이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (24row)
+DeepSeek V3를 예로 들면(num_experts=256, num_expert_group=8):
+- VPT = 256/8 = 32: 각 스레드가 32개의 expert를 처리한다
+- ROWS_PER_WARP = 32/8 = 4: 각 warp가 4행의 데이터를 처리한다
+- ROWS_PER_CTA = 6 * 4 = 24: 각 block이 24행의 데이터를 처리한다
 
-### 0x2.2 dispatch 의2이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)인터페이스
+## 0x2.2 dispatch되는 2가지 kernel 인터페이스
 
 ```c++
 //------------------------------------------------------------------------------
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Kernel)버전(관련 내용사용컴파일관련 내용
+// 템플릿화된 Kernel 버전(컴파일 타임 상수 사용)
 //------------------------------------------------------------------------------
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)파라미터이 부분은 원문의 해당 기술 설명을 이어서 서술한다있다파라미터모두이다컴파일관련 내용
+// kernel 파라미터 구조체 정의, 모든 파라미터는 컴파일 타임 상수다
 template <int VPT_, int NUM_EXPERTS_, int THREADS_PER_ROW_, int ROWS_PER_WARP_, int ROWS_PER_CTA_, int WARPS_PER_CTA_>
 struct KernelParams {
-  static constexpr int VPT = VPT_;                    // 각개thread관련 내용의expert개수(Values Per Thread)
-  static constexpr int NUM_EXPERTS = NUM_EXPERTS_;     // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)개수
-  static constexpr int THREADS_PER_ROW = THREADS_PER_ROW_; // 관련 내용각row관련 내용의thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)개수
-  static constexpr int ROWS_PER_WARP = ROWS_PER_WARP_;    // 각개warp관련 내용의row관련 내용
-  static constexpr int ROWS_PER_CTA = ROWS_PER_CTA_;      // 각개CTA(block)관련 내용의row관련 내용
-  static constexpr int WARPS_PER_CTA = WARPS_PER_CTA_;    // 각개CTA관련 내용의warp개수
+  static constexpr int VPT = VPT_;                    // 각 스레드가 처리하는 expert 수(Values Per Thread)
+  static constexpr int NUM_EXPERTS = NUM_EXPERTS_;     // 전체 expert 수
+  static constexpr int THREADS_PER_ROW = THREADS_PER_ROW_; // 한 행의 데이터를 처리하는 데 필요한 스레드 수, expert group 수와 같다
+  static constexpr int ROWS_PER_WARP = ROWS_PER_WARP_;    // 각 warp가 처리하는 행 수
+  static constexpr int ROWS_PER_CTA = ROWS_PER_CTA_;      // 각 CTA(block)가 처리하는 행 수
+  static constexpr int WARPS_PER_CTA = WARPS_PER_CTA_;    // 각 CTA가 포함하는 warp 수
 };
 
-// 관련 내용의kernel함수관련 내용
+// 템플릿화된 kernel 함수 정의
 template <
-    typename T,           // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (float/half/bfloat16)
-    int VPT,             // 각thread관련 내용의expert관련 내용
-    int NUM_EXPERTS,     // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)
-    int THREADS_PER_ROW, // 각row관련 내용의thread관련 내용
-    int ROWS_PER_WARP,   // 각warp관련 내용의row관련 내용
-    int ROWS_PER_CTA,    // 각block관련 내용의row관련 내용
-    int WARPS_PER_CTA>   // 각block의warp관련 내용
+    typename T,           // 데이터 타입(float/half/bfloat16)
+    int VPT,             // 스레드당 처리하는 expert 수
+    int NUM_EXPERTS,     // 전체 expert 수
+    int THREADS_PER_ROW, // 행당 필요한 스레드 수
+    int ROWS_PER_WARP,   // warp당 처리하는 행 수
+    int ROWS_PER_CTA,    // block당 처리하는 행 수
+    int WARPS_PER_CTA>   // block당 warp 수
 __global__ void moe_fused_gate_kernel(
-    void* input,         // 입력텐서
-    void* bias,          // bias텐서
-    float* output_ptr,   // 출력weight
-    int32_t* indices_ptr,// 출력expert인덱스
-    int64_t num_rows,    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row token)개수)
-    int64_t topk_group,  // 각개token선택의expert관련 내용개수
-    int64_t topk) {      // 각개token선택의expert개수
-  // 관련 내용컴파일관련 내용파라미터관련 내용
+    void* input,         // 입력 텐서
+    void* bias,          // bias 텐서
+    float* output_ptr,   // 출력 가중치
+    int32_t* indices_ptr,// 출력 expert 인덱스
+    int64_t num_rows,    // 전체 행 수(token 수)
+    int64_t topk_group,  // 각 token이 선택하는 expert group 수
+    int64_t topk) {      // 각 token이 선택하는 expert 수
+  // 컴파일 타임 파라미터 구조체를 구성
   KernelParams<VPT, NUM_EXPERTS, THREADS_PER_ROW, ROWS_PER_WARP, ROWS_PER_CTA, WARPS_PER_CTA> params;
-  // 호출한다구현함수
+  // 구현 함수 호출
   moe_fused_gate_impl<T>(input, bias, output_ptr, indices_ptr, num_rows, topk_group, topk, params);
 }
 
-// 사용된다시작kernel의관련 내용계산컴파일관련 내용그리고시작kernel
+// kernel을 실행하기 위한 매크로, 컴파일 타임 상수를 계산하고 kernel을 실행한다
 #define LAUNCH_MOE_GATE_CONFIG(T, EXPERTS, EXPERT_GROUP)                                                 \
   do {                                                                                                   \
-    // 계산각개thread관련 내용의expert개수                                                                          
+    // 각 스레드가 처리하는 expert 수를 계산                                                                 
     constexpr int VPT = (EXPERTS) / (EXPERT_GROUP);                                                      \
-    // 만약expert관련 내용개수큰이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (WARP_SIZE)각개warp만이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1row)계산각개warp가능로관련 내용의row관련 내용
-    constexpr int ROWS_PER_WARP = ((EXPERT_GROUP) <= WARP_SIZE)? (WARP_SIZE / (EXPERT_GROUP)): 1;      \
-    // 계산각개block가능로관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)
+    // expert group 수가 WARP_SIZE보다 크면 warp당 1행만 처리하고, 그렇지 않으면 warp당 처리 가능한 행 수를 계산  
+    constexpr int ROWS_PER_WARP = ((EXPERT_GROUP) <= WARP_SIZE) ? (WARP_SIZE / (EXPERT_GROUP)) : 1;      \
+    // 각 block이 처리할 수 있는 전체 행 수를 계산                                                           
     constexpr int ROWS_PER_CTA = WARPS_PER_CTA * ROWS_PER_WARP;                                          \
-    // 시작kernel                                                                                         
+    // kernel 실행                                                                                        
     moe_fused_gate_kernel<T, VPT, (EXPERTS), (EXPERT_GROUP), ROWS_PER_WARP, ROWS_PER_CTA, WARPS_PER_CTA> \
         <<<num_blocks, block_dim, 0, stream>>>(                                                          \
             input.data_ptr(),                                                                            \
@@ -406,19 +404,19 @@ __global__ void moe_fused_gate_kernel(
   } while (0)
 
 //------------------------------------------------------------------------------
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Kernel)버전(이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)계산파라미터)
+// 동적 Kernel 버전(런타임에 파라미터 계산)
 //------------------------------------------------------------------------------
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)파라미터관련 내용
+// 런타임 파라미터 구조체
 struct KernelParamsDynamic {
-  int VPT;              // 각thread관련 내용의expert관련 내용
-  int NUM_EXPERTS;      // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)
-  int THREADS_PER_ROW;  // 각row관련 내용의thread관련 내용
-  int ROWS_PER_WARP;    // 각warp관련 내용의row관련 내용
-  int ROWS_PER_CTA;     // 각block관련 내용의row관련 내용
-  int WARPS_PER_CTA;    // 각block의warp관련 내용
+  int VPT;              // 스레드당 처리하는 expert 수
+  int NUM_EXPERTS;      // 전체 expert 수
+  int THREADS_PER_ROW;  // 행당 필요한 스레드 수
+  int ROWS_PER_WARP;    // warp당 처리하는 행 수
+  int ROWS_PER_CTA;     // block당 처리하는 행 수
+  int WARPS_PER_CTA;    // block당 warp 수
 };
 
-// 관련 내용파라미터버전의kernel함수
+// 동적 파라미터 버전의 kernel 함수
 template <typename T>
 __global__ void moe_fused_gate_kernel_dynamic(
     void* input,
@@ -426,84 +424,84 @@ __global__ void moe_fused_gate_kernel_dynamic(
     float* output_ptr,
     int32_t* indices_ptr,
     int64_t num_rows,
-    int64_t num_experts,      // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)의expert개수
-    int64_t num_expert_group, // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)의expert관련 내용개수
+    int64_t num_experts,      // 런타임에 지정되는 expert 수
+    int64_t num_expert_group, // 런타임에 지정되는 expert group 수
     int64_t topk_group,
     int64_t topk) {
   KernelParamsDynamic params;
-  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)계산관련 내용있다파라미터
-  params.NUM_EXPERTS = num_experts;             // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (deepseek v3)중이다256
-  params.VPT = num_experts / num_expert_group;  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (deepseek v3)중이다256/8=32
-  params.THREADS_PER_ROW = num_expert_group;    // 관련 내용로expert관련 내용개수，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (deepseek v3)중이다8
-  params.WARPS_PER_CTA = WARPS_PER_CTA;        // 관련 내용로6
-  params.ROWS_PER_WARP = std::max<int64_t>(1, WARP_SIZE / num_expert_group);  // WARP_SIZE관련 내용로32
+  // 런타임에 모든 파라미터를 계산
+  params.NUM_EXPERTS = num_experts;             // 예: deepseek v3에서는 256
+  params.VPT = num_experts / num_expert_group;  // 예: deepseek v3에서는 256/8=32
+  params.THREADS_PER_ROW = num_expert_group;    // expert group 수로 고정, 예: deepseek v3에서는 8
+  params.WARPS_PER_CTA = WARPS_PER_CTA;        // 6으로 고정
+  params.ROWS_PER_WARP = std::max<int64_t>(1, WARP_SIZE / num_expert_group);  // WARP_SIZE는 32로 고정
   params.ROWS_PER_CTA = params.WARPS_PER_CTA * params.ROWS_PER_WARP;
 
-  // 호출한다구현함수
+  // 구현 함수 호출
   moe_fused_gate_impl<T>(input, bias, output_ptr, indices_ptr, num_rows, topk_group, topk, params);
 }
 ```
 
-여기있다2개kernel，관련 내용개이다관련 내용의kernel，관련 내용개이다관련 내용의kernel。관련 내용의kernel에서컴파일관련 내용된다계산관련 내용있다파라미터，그다음시작kernel。관련 내용의kernel에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)계산관련 내용있다파라미터，그다음시작kernel。관련 내용 (2)개kernel모두관련 내용상관련 내용소개의thread모델，관련 내용각개thread관련 내용개수의expert(VPT)，많은개thread관련 내용개관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row THREADS_PER_ROW)많은개thread관련 내용개warp，많은개warp관련 내용개block(CTA)。
+여기에는 kernel이 2개 있다. 하나는 템플릿화된 kernel이고, 다른 하나는 동적 kernel이다. 템플릿화된 kernel은 컴파일 타임에 모든 파라미터를 계산한 뒤 kernel을 실행한다. 동적 kernel은 런타임에 모든 파라미터를 계산한 뒤 kernel을 실행한다. 하지만 두 kernel 모두 앞 절에서 소개한 스레드 모델을 따른다. 즉 각 스레드가 고정된 수의 expert(VPT)를 처리하고, 여러 스레드가 하나의 그룹을 이루어 한 행의 데이터를 처리하며(THREADS_PER_ROW), 여러 스레드 그룹이 하나의 warp를 이루고, 여러 warp가 하나의 block(CTA)을 이룬다.
 
-### 0x2.3 관련 내용함수와관련 내용
+## 0x2.3 보조 함수와 데이터 구조
 
 ```c++
-// 관련 내용사용CUTLASS관련 내용의AlignedArray관련 내용로정렬배열의관련 내용
+// CUTLASS 라이브러리의 AlignedArray를 정렬 배열의 기본 타입으로 사용
 template <typename T, int N>
 using AlignedArray = cutlass::AlignedArray<T, N>;
 
-// 관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-using bfloat16_t = cutlass::bfloat16_t;  // brain floating point 16관련 내용
-using float16_t = cutlass::half_t;        // IEEE 754 half precision 16관련 내용
-using float32_t = float;                  // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (32)
+// 자주 쓰는 데이터 타입 별칭 정의
+using bfloat16_t = cutlass::bfloat16_t;  // brain floating point 16비트
+using float16_t = cutlass::half_t;        // IEEE 754 half precision 16비트
+using float32_t = float;                  // 표준 32비트 부동소수점
 
-// 관련 내용함수：관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다의큰관련 내용
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (at::Half)왜냐하면관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다된다관련 내용
+// 비교 함수: 서로 다른 데이터 타입의 '보다 큼' 연산 처리
+// at::Half 타입은 연산자 오버로딩이 모호성을 일으키므로 특별히 처리한다
 template <typename T>
 __device__ inline bool cmp_gt(const T& a, const T& b) {
   if constexpr (std::is_same<T, at::Half>::value) {
-    // 대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (at::Half)로float다시이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // at::Half 타입은 먼저 float으로 변환한 뒤 비교하여 연산자 오버로딩 모호성을 피한다
     return static_cast<float>(a) > static_cast<float>(b);
   } else {
-    // 대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (float), BFloat16, half_t이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용관련 내용의>관련 내용
+    // 그 밖의 타입(float, BFloat16, half_t 등)은 내장 > 연산자를 그대로 사용한다
     return a > b;
   }
 }
 
-// 관련 내용함수：관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다의관련 내용
+// 비교 함수: 서로 다른 데이터 타입의 동등 비교 연산 처리
 template <typename T>
 __device__ inline bool cmp_eq(const T& a, const T& b) {
   if constexpr (std::is_same<T, at::Half>::value) {
-    // 대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (at::Half)로float다시관련 내용
+    // at::Half 타입은 float으로 변환한 뒤 비교한다
     return static_cast<float>(a) == static_cast<float>(b);
   } else {
-    // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용==관련 내용
+    // 그 밖의 타입은 == 연산자를 그대로 사용한다
     return a == b;
   }
 }
 
-// 관련 내용있다kernel관련 내용사용의관련 내용
-static constexpr int WARP_SIZE = 32;       // CUDA warp크기，관련 내용로32개thread
-static constexpr int WARPS_PER_CTA = 6;    // 각개CTA(block)관련 내용 (6)개warp
-static constexpr int MAX_VPT = 32;         // 각개thread관련 내용많은관련 내용 (32)개expert관련 내용
-                                          // 반드시큰이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (params.VPT num_expert/num_expert_group)
+// 모든 kernel이 공유하는 고정 상수 정의
+static constexpr int WARP_SIZE = 32;       // CUDA warp 크기, 32개 스레드로 고정
+static constexpr int WARPS_PER_CTA = 6;    // 각 CTA(block)는 6개의 warp를 포함한다
+static constexpr int MAX_VPT = 32;         // 각 스레드는 최대 32개의 expert 값을 처리한다
+                                          // params.VPT(num_expert/num_expert_group)보다 커야 한다
 
-// 생성한다Array이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용AlignedArray보장관련 내용정렬
+// Array 타입 별칭 생성, AlignedArray를 사용해 메모리 정렬을 보장한다
 template <typename T, int N>
 using Array = AlignedArray<T, N>;
 
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용된다vectorization로드관련 내용
-// 주의：여기의MAX_VPT반드시이다컴파일이 부분은 원문의 해당 기술 설명을 이어서 서술한다큰관련 내용의params.VPT관련 내용
+// 접근 타입 정의, 데이터를 벡터화해서 로드하는 데 사용한다
+// 주의: 여기서의 MAX_VPT는 컴파일 타임 상수여야 하고, 실제 params.VPT 값보다 커야 한다
 template <typename T>
 using AccessType = AlignedArray<T, MAX_VPT>;
 ```
 
-관련 내용코드주요완료관련 내용의관련 내용와우리는에서Host관련 내용시작kernel관련 내용사용까지의관련 내용로및관련 내용개관련 내용함수사용된다kernel중의topk관련 내용
+이 코드는 주로 데이터 타입 정의, Host 측에서 kernel을 실행할 때 필요한 상수 정의, 그리고 kernel 안의 topk 연산에 사용되는 두 개의 비교 함수를 완성한다.
 
-### 0x2.4 moe_fused_gate_impl cuda kernel관련 내용구현
+## 0x2.4 moe_fused_gate_impl cuda kernel 구체 구현
 
-#### 초기화와관련 내용로드
+### 초기화와 데이터 로드
 
 ```c++
 int tidx = threadIdx.x;
@@ -514,35 +512,35 @@ if (thread_row >= num_rows) {
 }
 ```
 
-관련 내용부분계산각개thread관련 내용의row(token)인덱스。여기서：
-- `thread_row` 대응Python코드중의token인덱스，사용된다관련 내용`hidden_states[token_idx]` 와 `gating_output[token_idx]`
-- `params.THREADS_PER_ROW` 관련 내용`num_expert_group`
+이 부분은 각 스레드가 처리하는 행(token) 인덱스를 계산한다. 여기서:
+- `thread_row`는 Python 코드의 token 인덱스에 해당하며, `hidden_states[token_idx]`와 `gating_output[token_idx]`에 접근하는 데 사용된다
+- `params.THREADS_PER_ROW`는 `num_expert_group`과 같다
 
-#### 관련 내용읽기와thread관련인덱스계산
+### 데이터 읽기와 스레드 관련 인덱스 계산
 
 ```c++
 auto* input_ptr = reinterpret_cast<T*>(input);
 auto* bias_ptr = reinterpret_cast<T*>(bias);
 auto* thread_row_ptr = input_ptr + thread_row * params.NUM_EXPERTS;
 
-// 계산현재thread에서관련 내용개thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (expert)의인덱스관련 내용
-// 때문에params.THREADS_PER_ROW이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_expert_group expert)개수)
-// 이관련 내용할 것이다관련 내용개warp중의thread관련 내용까지아니관련 내용의expert관련 내용중
+// 현재 스레드가 하나의 스레드 그룹(expert group) 안에서 갖는 인덱스 위치를 계산
+// params.THREADS_PER_ROW가 num_expert_group(expert group 수)과 같으므로
+// 이 연산은 같은 warp 안의 스레드들을 서로 다른 expert group으로 나눈다
 int thread_group_idx = tidx % params.THREADS_PER_ROW;
 
-// 계산현재thread담당관련 내용의제관련 내용개expert의인덱스
-// 각개thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (params.VPT)개expert，params.VPT = num_experts/num_expert_group
-// 관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (DeepSeek V3 num_experts=256 num_expert_group=8)
-// params.VPT=32，관련 내용각개thread관련 내용 (32)개관련 내용의expert
+// 현재 스레드가 처리를 담당하는 첫 번째 expert의 인덱스를 계산
+// 각 스레드는 params.VPT개의 expert를 처리한다. params.VPT = num_experts/num_expert_group
+// 예: DeepSeek V3의 경우 num_experts=256, num_expert_group=8일 때
+// params.VPT=32, 즉 각 스레드가 연속된 32개의 expert를 처리한다
 int first_elt_read_by_thread = thread_group_idx * params.VPT;
 ```
 
-- `input_ptr` 대응 `gating_output`
-- `bias_ptr` 대응 `correction_bias`
-- `params.NUM_EXPERTS` 대응 `num_experts`
-- `params.VPT` 대응 `num_experts / num_expert_group`
+- `input_ptr`은 `gating_output`에 해당한다
+- `bias_ptr`은 `correction_bias`에 해당한다
+- `params.NUM_EXPERTS`는 `num_experts`에 해당한다
+- `params.VPT`는 `num_experts / num_expert_group`에 해당한다
 
-#### 대해 gating_output 응용 Sigmoid
+### gating_output에 Sigmoid 적용
 
 ```c++
 ////////////////////// Sigmoid //////////////////////
@@ -552,13 +550,13 @@ for (int ii = 0; ii < params.VPT; ++ii) {
 }
 ```
 
-대응python코드중의：
+python 코드에서 다음에 해당한다:
 
 ```python
 scores = gating_output.sigmoid()
 ```
 
-#### 추가 correction_bias
+### correction_bias 추가
 
 ```c++
 ////////////////////// Add Bias //////////////////////
@@ -568,30 +566,30 @@ for (int ii = 0; ii < params.VPT; ++ii) {
 }
 ```
 
-대응Python코드중의：
+Python 코드에서 다음에 해당한다:
 
 ```python
 scores_for_choice = scores.view(num_token, -1) + correction_bias.unsqueeze(0)
 ```
 
-#### 통해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)낮은의expert관련 내용구현grouped topk
+### 점수가 가장 낮은 expert group을 루프로 제외해 grouped topk를 간접 구현하기
 
 ```c++
 
 ////////////////////// Exclude Groups //////////////////////
-// 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (num_expert_group - topk_group),각관련 내용까지관련 내용개score관련 내용낮은의expert관련 내용그리고할 것이다관련 내용
+// num_expert_group - topk_group번 반복하며, 매번 점수가 가장 낮은 expert group을 하나 찾아 제외한다
 #pragma unroll
   for (int k_idx = 0; k_idx < params.THREADS_PER_ROW - topk_group;
        ++k_idx) {  // QQ NOTE Here params.THREADS_PER_ROW = num_expert_group
     int expert = first_elt_read_by_thread;
-    // 에서현재thread담당의expert중관련 내용까지관련 내용큰의관련 내용개관련 내용
+    // 현재 스레드가 담당하는 expert 중에서 가장 큰 두 값을 찾는다
     T max_val = static_cast<T>(-FLT_MAX);
     T max_val_second = static_cast<T>(-FLT_MAX);
 #pragma unroll
     for (int ii = 0; ii < params.VPT; ++ii) {
       T val = bias_chunk[ii];
 
-      // 갱신관련 내용큰관련 내용와관련 내용큰관련 내용
+      // 최대값과 두 번째 최대값을 갱신
       if (cmp_gt(val, max_val)) {
         max_val_second = max_val;
         max_val = val;
@@ -600,33 +598,33 @@ scores_for_choice = scores.view(num_token, -1) + correction_bias.unsqueeze(0)
       }
     }
 
-    // 계산현재expert관련 내용의score(top2score관련 내용와)
+    // 현재 expert group의 점수를 계산(top2 점수의 합)
     // QQ NOTE: currently fixed to pick top2 sigmoid weight value in each expert group and sum them as the group weight
     // to select expert groups
     T max_sum = max_val + max_val_second;
 
-// 에서warp관련 내용수행한다관련 내용,관련 내용까지score관련 내용낮은의expert관련 내용
+// warp 안에서 리덕션을 수행해 점수가 가장 낮은 expert group을 찾는다
 #pragma unroll
     for (int mask = params.THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
-      // 관련 내용사용warp shuffle이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+      // warp shuffle 연산으로 데이터를 교환
       T other_max_sum =
           static_cast<T>(__shfl_xor_sync(0xFFFFFFFF, static_cast<float>(max_sum), mask, params.THREADS_PER_ROW));
       int other_expert = __shfl_xor_sync(0xFFFFFFFF, expert, mask, params.THREADS_PER_ROW);
 
-      // 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score),이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)낮은의expert관련 내용
-      // 만약score관련 내용,관련 내용인덱스관련 내용큰의expert관련 내용
+      // 점수를 비교해 점수가 더 낮은 expert group을 남긴다
+      // 점수가 같으면 인덱스가 더 큰 expert group을 남긴다
       if (cmp_gt(max_sum, other_max_sum) || (cmp_eq(other_max_sum, max_sum) && other_expert > expert)) {
         max_sum = other_max_sum;
         expert = other_expert;
       }
     }
 
-    // 할 것이다score관련 내용낮은의expert관련 내용의관련 내용있다expertscore관련 내용로FLT_MAX,관련 내용할 것이다관련 내용
+    // 점수가 가장 낮은 expert group의 모든 expert 점수를 FLT_MAX로 설정하여, 제외한 것과 같은 효과를 낸다
     if (k_idx < params.THREADS_PER_ROW - topk_group) {
-      // 계산관련 내용의threadID
+      // 지워야 할 스레드 ID를 계산
       int const thread_to_clear_in_group = expert / params.VPT;
 
-      // 만약현재thread담당이expert관련 내용
+      // 현재 스레드가 이 expert group을 담당한다면
       if (thread_group_idx == thread_to_clear_in_group) {
 #pragma unroll
         for (int ii = 0; ii < params.VPT; ++ii) {
@@ -636,60 +634,60 @@ scores_for_choice = scores.view(num_token, -1) + correction_bias.unsqueeze(0)
     }
   }
 
-  // 관련 내용있다thread,보장expert이 부분은 원문의 해당 기술 설명을 이어서 서술한다완료
+  // 모든 스레드를 동기화해 expert group 제외 연산이 완료되었음을 보장한다
   __syncthreads();
 ```
 
-대응Python코드중의：
+Python 코드에서 다음에 해당한다:
 
 ```python
-# 계산각개expert관련 내용의score：
-# 1. 할 것이다scores관련 내용로[num_token, num_expert_group, experts_per_group]
-# 2. 에서각개관련 내용선택top2의score
-# 3. 대해각개관련 내용의top2score관련 내용와，관련 내용까지이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (score)
+# 각 expert group의 점수 계산:
+# 1. scores를 [num_token, num_expert_group, experts_per_group] 형태로 reshape
+# 2. 각 group 안에서 top2 점수를 선택
+# 3. 각 group의 top2 점수를 더해 group 점수를 얻는다
 group_scores = (
     scores_for_choice.view(num_token, num_expert_group, -1)
-.topk(2, dim=-1)[0]
-.sum(dim=-1)
+    .topk(2, dim=-1)[0]
+    .sum(dim=-1)
 )  # [n, n_group]
 
-# 선택score관련 내용높은의topk_group개expert관련 내용
+# 점수가 가장 높은 topk_group개의 expert group을 선택
 group_idx = torch.topk(group_scores, k=topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
 
-# 생성한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)중의관련 내용
+# group mask를 만들어 선택된 group을 표시
 group_mask = torch.zeros_like(group_scores)  # [n, n_group]
 group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
 
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (mask)까지expert관련 내용
+# group mask를 expert 단위로 확장
 score_mask = (
     group_mask.unsqueeze(-1)
-.expand(num_token, num_expert_group, scores.shape[-1] // num_expert_group)
-.reshape(num_token, -1)
+    .expand(num_token, num_expert_group, scores.shape[-1] // num_expert_group)
+    .reshape(num_token, -1)
 )  # [n, e]
 
-# 할 것이다관련 내용중관련 내용의expertscore관련 내용로관련 내용없음관련 내용
+# 선택되지 않은 group의 expert 점수를 음의 무한대로 설정
 tmp_scores = scores_for_choice.masked_fill(
     ~score_mask.bool(), float("-inf")
 )  # [n, e]
 ```
 
 
-#### 통해관련 내용선택topk개expert관련 내용구현topk
+### 루프로 topk개의 expert를 선택해 topk를 간접 구현하기
 
 ```c++
 ////////////////////// Topk //////////////////////
-  // 사용된다관련 내용중expertweight의관련 내용와,사용된다후관련 내용정규화
+  // 선택된 expert 가중치의 총합을 저장하며, 이후 정규화에 사용한다
   float output_sum = 0.0f;
 
-  // 관련 내용선택topk개expert
+  // 반복하며 topk개의 expert를 선택
   for (int k_idx = 0; k_idx < topk; ++k_idx) {
-    // 에서현재thread의bias_chunk중관련 내용까지관련 내용큰관련 내용및관련 내용대응의expertID
+    // 현재 스레드의 bias_chunk에서 최대값과 그에 대응하는 expert ID를 찾는다
     T max_val = bias_chunk[0];
     int expert = first_elt_read_by_thread;
 
-    // 만약현재관련 내용아니이다FLT_MAX(설명이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    // 현재 값이 FLT_MAX가 아니라면(해당 위치가 아직 지워지지 않았다는 뜻)
     if (!cmp_eq(max_val, static_cast<T>(FLT_MAX))) {
-      // 관련 내용현재thread담당의관련 내용있다expert,관련 내용까지관련 내용큰관련 내용
+      // 현재 스레드가 담당하는 모든 expert를 순회하며 최대값을 찾는다
 #pragma unroll
       for (int ii = 1; ii < params.VPT; ++ii) {
         T val = bias_chunk[ii];
@@ -699,67 +697,67 @@ tmp_scores = scores_for_choice.masked_fill(
         }
       }
     } else {
-      // 만약현재관련 내용이다FLT_MAX,설명이 부분은 원문의 해당 기술 설명을 이어서 서술한다,할 것이다max_val관련 내용로관련 내용작은관련 내용
+      // 현재 값이 FLT_MAX라면 해당 위치가 이미 지워졌다는 뜻이므로, max_val을 최소값으로 설정한다
       max_val = static_cast<T>(-FLT_MAX);
     }
 
-    // 에서warp관련 내용수행한다관련 내용,관련 내용까지관련 내용큰관련 내용
+    // warp 안에서 리덕션을 수행해 전역 최대값을 찾는다
 #pragma unroll
     for (int mask = params.THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
-      // 관련 내용사용warp shuffle이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+      // warp shuffle 연산으로 데이터를 교환
       T other_max =
           static_cast<T>(__shfl_xor_sync(0xFFFFFFFF, static_cast<float>(max_val), mask, params.THREADS_PER_ROW));
       int other_expert = __shfl_xor_sync(0xFFFFFFFF, expert, mask, params.THREADS_PER_ROW);
 
-      // 갱신관련 내용큰관련 내용,만약관련 내용선택ID관련 내용작은의expert
+      // 최대값을 갱신하고, 값이 같으면 ID가 더 작은 expert를 선택한다
       if (cmp_gt(other_max, max_val) || (cmp_eq(other_max, max_val) && other_expert < expert)) {
         max_val = other_max;
         expert = other_expert;
       }
     }
 
-    // 만약현재이다있다관련 내용의topk인덱스
+    // 현재가 유효한 topk 인덱스라면
     if (k_idx < topk) {
-      // 계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다큰관련 내용의threadID
+      // 최대값을 지워야 할 스레드 ID를 계산
       int thread_to_clear_in_group = expert / params.VPT;
-      // 계산출력배열의인덱스
+      // 출력 배열의 인덱스를 계산
       int64_t idx = topk * thread_row + k_idx;
 
-      // 만약현재thread관련 내용이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다큰관련 내용의thread관련 내용
+      // 현재 스레드 그룹이 최대값을 지워야 할 스레드 그룹이라면
       if (thread_group_idx == thread_to_clear_in_group) {
-        // 계산에서thread이 부분은 원문의 해당 기술 설명을 이어서 서술한다의expert인덱스
+        // 스레드 안에서 지워야 할 expert 인덱스를 계산
         int expert_to_clear_in_thread = expert % params.VPT;
 
-        // 할 것이다관련 내용중의expert관련 내용로관련 내용사용
+        // 선택된 expert 위치를 사용됨으로 표시
         bias_chunk[expert_to_clear_in_thread] = static_cast<T>(-FLT_MAX);
 
-        // 관련 내용중expert의weight와인덱스
+        // 선택된 expert의 가중치와 인덱스를 저장
         output_ptr[idx] = static_cast<float>(row_chunk[expert_to_clear_in_thread]);
         indices_ptr[idx] = static_cast<int32_t>(expert);
       }
 
-      // 제0개thread관련 내용담당이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight)와
+      // 0번 스레드 그룹이 가중치 합의 누적을 담당한다
       if (thread_group_idx == 0) {
         output_sum += output_ptr[idx];
       }
     }
 
-    // 관련 내용있다thread
+    // 모든 스레드를 동기화
     __syncthreads();
   }
 ```
 
-대응Python코드중의：
+Python 코드에서 다음에 해당한다:
 
 ```python
 _, topk_ids = torch.topk(tmp_scores, k=topk, dim=-1, sorted=False)
-# 얻는다관련 내용중expert의원본score관련 내용로weight
+# 선택된 expert의 원래 점수를 가중치로 가져온다
 topk_weights = scores.gather(1, topk_ids)
 
 topk_weights_sum = topk_weights.sum(dim=-1, keepdim=True)
 ```
 
-#### weight정규화
+### 가중치 정규화
 
 ```c++
 ////////////////////// Rescale Output //////////////////////
@@ -772,114 +770,114 @@ if (thread_group_idx == 0) {
 }
 ```
 
-대응Python코드중의마지막으로관련 내용 (row)
+Python 코드의 마지막 몇 줄에 해당한다:
 
 ```python
-# 만약관련 내용새정규화，대해관련 내용중의expertweight수행한다정규화관련 내용
+# 재정규화가 필요하면 선택된 expert 가중치를 정규화한다
 if renormalize:
     topk_weights = topk_weights / topk_weights_sum
 
-# 반환한다정규화후의weight와관련 내용중의expertID
+# 정규화된 가중치와 선택된 expert ID를 반환
 return topk_weights.to(torch.float32), topk_ids.to(torch.int32)
 ```
 
 
-### 0x2.5 관련 내용
+## 0x2.5 흐름도
 
-관련 내용코드관련 내용읽다관련 내용사용Claude 3.5 sonnet-20241022생성한다관련 내용개관련 내용하관련 내용
+코드 리딩을 바탕으로 Claude 3.5 sonnet-20241022을 사용해 다음과 같은 흐름도를 생성했다:
 
 ```markdown
-초기화와이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-┌─────────────────────────┐
-│        관련 내용│
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│  초기화thread인덱스와관련 내용│
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│    계산thread_row       │
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│ thread_row >= num_rows? │
-└──────────┬──────────────┘
-     관련 내용↓        이다 → 반환한다
-┌─────────────────────────┐
-│  관련 내용읽기와관련 내용│
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│     Sigmoid관련 내용│
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│      추가bias           │
-└──────────┬──────────────┘
-           ↓
+초기화와 데이터 전처리
+┌─────────────────────────────┐
+│            시작             │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│ 스레드 인덱스/데이터 초기화 │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│       thread_row 계산       │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│   thread_row >= num_rows?   │
+└────────────┬────────────────┘
+   아니오    ↓        예 → 반환
+┌─────────────────────────────┐
+│   데이터 읽기와 타입 변환   │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│       Sigmoid 활성화        │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│          bias 추가          │
+└────────────┬────────────────┘
+             ↓
 
-expert관련 내용선택단계
-┌─────────────────────────┐
-│    expert관련 내용선택관련 내용│←─────┐
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│ 에서각개expert이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (top2score)│      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│   계산expert이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (scoresum_top2)│      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│ Warp이 부분은 원문의 해당 기술 설명을 이어서 서술한다낮은그룹화    │      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│    관련 내용낮은그룹화         │      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│  완료관련 내용있다관련 내용│─관련 내용───┘
-└──────────┬──────────────┘
-     이다    ↓
+expert group 선택 단계
+┌─────────────────────────────┐
+│   expert group 선택 루프    │←───────┐
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│ 각 group 내 top2 점수 찾기  │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│  group 점수 sum_top2 계산   │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│Warp 리덕션: 최저 group 탐색 │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│    최저 점수 group 제외     │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│    모든 group 제외 완료?    │─아니오─┘
+└────────────┬────────────────┘
+      예     ↓
 
-expert선택단계
-┌─────────────────────────┐
-│    expert선택관련 내용│←─────┐
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│   에서현재thread관련 내용큰관련 내용│      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│ Warp이 부분은 원문의 해당 기술 설명을 이어서 서술한다큰관련 내용│      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│   갱신출력와인덱스        │      │
-└──────────┬──────────────┘      │
-           ↓                      │
-┌─────────────────────────┐      │
-│  완료관련 내용있다topk선택？     │─관련 내용───┘
-└──────────┬──────────────┘
-     이다    ↓
+expert 선택 단계
+┌─────────────────────────────┐
+│      expert 선택 루프       │←───────┐
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│ 현재 스레드에서 최대값 찾기 │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│Warp 리덕션: 전역 최대값 탐색│        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│     출력과 인덱스 갱신      │        │
+└────────────┬────────────────┘        │
+             ↓                         │
+┌─────────────────────────────┐        │
+│       topk 선택 완료?       │─아니오─┘
+└────────────┬────────────────┘
+      예     ↓
 
-관련 내용
-┌─────────────────────────┐
-│     weight정규화          │
-└──────────┬──────────────┘
-           ↓
-┌─────────────────────────┐
-│         관련 내용│
-└─────────────────────────┘
+최종 처리
+┌─────────────────────────────┐
+│        가중치 정규화        │
+└────────────┬────────────────┘
+             ↓
+┌─────────────────────────────┐
+│            종료             │
+└─────────────────────────────┘
 ```
 
-## 0x3. 정리
+# 0x3. 요약
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (blog)소개관련 내용하관련 내용통해cuda코드구현DeepSeek V3의biased_grouped_topk융합operator，관련 내용상이kernel이 부분은 원문의 해당 기술 설명을 이어서 서술한다와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TensorRT-LLM)와Faster-Transformer중，후관련 내용최적화와apply까지DeepSeek V3여기，이다관련 내용개관련 내용의CUDA kernel에서관련 내용중의최적화구현。
+이 blog에서는 DeepSeek V3의 biased_grouped_topk 융합 operator를 cuda 코드로 어떻게 구현하는지 소개했다. 사실 이 kernel은 처음에는 TensorRT-LLM과 Faster-Transformer에서 유래한 것으로 보이며, 이후 지속적으로 최적화되어 DeepSeek V3에 적용되었다. 추론 프레임워크에서 CUDA kernel이 최적화되는 방식을 보여주는 매우 전형적인 구현 사례다.
 
 
 

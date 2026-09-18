@@ -1,4 +1,4 @@
-# CUDA : 통용 행렬 곱 GEMM — 입문에서 숙련까지
+# CUDA (3): 통용 행렬 곱 GEMM — 입문에서 숙련까지
 
 > 원문: https://zhuanlan.zhihu.com/p/657632577
 
@@ -613,5 +613,9 @@ M N K =  16384  16384   1024, AVG Performance = 12931.6086 Gflops
 5. Matrix Multiplication CUDA
 6. LustofLife: [CUDA] 병렬 컴퓨팅 최적화 전략
 7. https://xmartlabs.github.io/cuda-calculator/
-8. CUTLASS: Software Primitives for Dense Linear Algebra at All Levels and Scales within CUDA | NVIDIA On-Demand
-9. CUTLASS로 다중 GEMM을 fuse해 비범한 성능을 끌어내는 방법 | NVIDIA On-Demand
+8. 李少侠: [공사 중] CUDA GEMM 이론 성능 분석과 kernel 최적화
+9. CUTLASS: Software Primitives for Dense Linear Algebra at All Levels and Scales within CUDA | NVIDIA On-Demand
+10. 我自己: CUTLASS: Fast Linear Algebra in CUDA C++
+11. CUTLASS로 다중 GEMM을 fuse해 비범한 성능을 끌어내는 방법 | NVIDIA On-Demand
+
+> 今夜月明人盡望, 不知秋思落誰家 — 王建 《十五夜望月》

@@ -1,20 +1,20 @@
-## 0x0. 머리말
+## 0x0. 서론
 
-최근에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)의관련 내용구현，관련 내용이다 SGLang 관련 내용의관련 내용모델관련 내용지원 Wan、Hunyuan、Qwen-Image、Flux 관련 내용의관련 내용와관련 내용생성한다모델。필자는관련 내용로 FLUX.1-dev 로관련 내용기록관련 내용하필자는대해관련 내용구현의관련 내용주요관련 내용모델관련 내용그리고row관련 내용와 attention backend 관련 내용개관련 내용
+최근 SGLang Diffusion의 소스 구현을 살펴보고 있다. SGLang 팀이 내놓은 diffusion 모델 추론 엔진으로, Wan, Hunyuan, Qwen-Image, Flux 등 주요 이미지·비디오 생성 모델을 지원한다. FLUX.1-dev를 예로 삼아 소스 구현에 대해 이해한 내용을 기록해 두려고 하며, 주로 모델 구성, 병렬 전략, attention backend 세 가지를 다룬다.
 
-## 0x1. 관련 내용
+## 0x1. 전체 아키텍처
 
-SGLang Diffusion 이다기반으로 SGLang 의 serving 관련 내용와서구현의，이 부분은 원문의 해당 기술 설명을 이어서 서술한다이다 `ComposedPipelineBase` 와 `PipelineStage` 의관련 내용모드（코드에서 `python/sglang/multimodal_gen/runtime/pipelines_core/composed_pipeline_base.py` 와 `stages/base.py`）。각개 stage 관련 내용개관련 내용의관련 내용가능，이 부분은 원문의 해당 기술 설명을 이어서 서술한다가서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (VAE)통해관련 내용이들 stage 관련 내용가능로관련 내용완전한의관련 내용
+SGLang Diffusion은 SGLang의 serving 아키텍처를 기반으로 구현되어 있고, 핵심 설계 아이디어는 `ComposedPipelineBase`와 `PipelineStage`의 조합 패턴이다(코드는 `python/sglang/multimodal_gen/runtime/pipelines_core/composed_pipeline_base.py`와 `stages/base.py`에 있다). 각 stage는 텍스트 인코딩, denoising, VAE 디코딩처럼 특정 기능 하나를 캡슐화하며, 이 stage들을 조합하면 완전한 추론 흐름을 구성할 수 있다.
 
-관련 내용개관련 내용의 pipeline 된다관련 내용이들 stage：InputValidationStage（입력검증）、TextEncodingStage（이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (ConditioningStage TimestepPreparationStage LatentPreparationStage latent DenoisingStage)가서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (DecodingStage VAE block)의관련 내용추가새모델또는관련 내용있다 pipeline 모두이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+전형적인 pipeline은 다음 stage들을 포함한다: InputValidationStage(입력 검증), TextEncodingStage(텍스트 인코딩), ConditioningStage(조건 준비), TimestepPreparationStage(timestep 준비), LatentPreparationStage(latent 준비), DenoisingStage(denoising 루프), DecodingStage(VAE 디코딩). 이런 모듈화된 설계 덕분에 새 모델을 추가하거나 기존 pipeline을 수정하는 일이 비교적 간단해진다.
 
-## 0x2. FLUX.1-dev 모델구현상세 해설
+## 0x2. FLUX.1-dev 모델 구현 상세
 
-관련 내용하와서필자는로 FLUX.1-dev 로관련 내용보다보다 SGLang Diffusion 이다관련 내용와관련 내용 (row)모델의。
+이어서 FLUX.1-dev를 예로 SGLang Diffusion이 모델을 어떻게 구성하고 실행하는지 살펴본다.
 
 ### 2.1 Pipeline 설정
 
-FLUX.1-dev 의 pipeline 설정관련 내용에서 `FluxPipelineConfig` 중（`configs/pipeline_configs/flux.py`）：
+FLUX.1-dev의 pipeline 설정은 `FluxPipelineConfig`에 정의되어 있다(`configs/pipeline_configs/flux.py`):
 
 ```python
 @dataclass
@@ -30,30 +30,30 @@ class FluxPipelineConfig(ImagePipelineConfig):
     # VAE 설정
     vae_config: VAEConfig = field(default_factory=FluxVAEConfig)
     
-    # Text encoder 설정（CLIP + T5）
-    text_encoder_configs: tuple[EncoderConfig,...] = field(
+    # Text encoder 설정(CLIP + T5)
+    text_encoder_configs: tuple[EncoderConfig, ...] = field(
         default_factory=lambda: (CLIPTextConfig(), T5Config())
     )
 ```
 
-이설정이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FLUX.1-dev)의관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (DiT)모델）、VAE（이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Text Encoders CLIP)와 T5 관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이 설정은 FLUX.1-dev에 필요한 모든 컴포넌트를 정의한다: DiT(핵심 diffusion 모델), VAE(이미지 인코딩/디코딩), Text Encoders(CLIP과 T5 두 개의 텍스트 인코더).
 
-### 2.2 모델관련 내용
+### 2.2 모델 아키텍처
 
-FLUX.1-dev 의 transformer 관련 내용에서 `FluxTransformer2DModel` 중구현（`runtime/models/dits/flux.py`）：
+FLUX.1-dev의 transformer 아키텍처는 `FluxTransformer2DModel`에 구현되어 있다(`runtime/models/dits/flux.py`):
 
 ```python
 class FluxTransformer2DModel(CachableDiT):
     def __init__(self, config: FluxConfig, hf_config: dict[str, Any]) -> None:
         super().__init__(config=config, hf_config=hf_config)
         
-        # 관련 내용
+        # 핵심 컴포넌트
         self.rotary_emb = FluxPosEmbed(theta=10000, axes_dim=self.config.axes_dims_rope)
         self.time_text_embed = CombinedTimestepTextProjEmbeddings(...)
         self.context_embedder = ReplicatedLinear(...)
         self.x_embedder = ReplicatedLinear(...)
         
-        # Transformer blocks（관련 내용
+        # Transformer blocks(dual-stream 아키텍처)
         self.transformer_blocks = nn.ModuleList([
             FluxTransformerBlock(...) for _ in range(self.config.num_layers)
         ])
@@ -64,21 +64,21 @@ class FluxTransformer2DModel(CachableDiT):
         ])
 ```
 
-FLUX 관련 내용사용관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (transformer_blocks)와관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention 19layer single_transformer_blocks)만관련 내용의 attention（38layer）。이관련 내용이다관련 내용있다관련 내용의。
+FLUX는 독특한 dual-stream 아키텍처를 채택했다. transformer_blocks는 이미지와 텍스트의 결합 attention을 처리하고(19층), single_transformer_blocks는 이미지의 attention만 처리한다(38층). 이 설계는 꽤 흥미롭다.
 
-### 2.3 Pipeline Stages 상세 해설
+### 2.3 Pipeline Stages 상세
 
-FLUX.1-dev 의 pipeline 에 의해로하 stages 관련 내용완전한코드에서 `runtime/pipelines/flux.py` 의 `create_pipeline_stages` 관련 내용
+FLUX.1-dev의 pipeline은 다음 stage들로 구성된다(전체 코드는 `runtime/pipelines/flux.py`의 `create_pipeline_stages` 메서드에 있다):
 
 ```python
 def create_pipeline_stages(self, server_args: ServerArgs):
-    # 1. 입력검증
+    # 1. 입력 검증
     self.add_stage(
         stage_name="input_validation_stage", 
         stage=InputValidationStage()
     )
     
-    # 2. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CLIP + T5)
+    # 2. 텍스트 인코딩(CLIP + T5)
     self.add_stage(
         stage_name="prompt_encoding_stage_primary",
         stage=TextEncodingStage(
@@ -93,13 +93,13 @@ def create_pipeline_stages(self, server_args: ServerArgs):
         ),
     )
     
-    # 3. 관련 내용
+    # 3. 조건 준비
     self.add_stage(
         stage_name="conditioning_stage", 
         stage=ConditioningStage()
     )
     
-    # 4. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+    # 4. timestep 준비
     self.add_stage(
         stage_name="timestep_preparation_stage",
         stage=TimestepPreparationStage(
@@ -108,7 +108,7 @@ def create_pipeline_stages(self, server_args: ServerArgs):
         ),
     )
     
-    # 5. Latent 관련 내용
+    # 5. Latent 준비
     self.add_stage(
         stage_name="latent_preparation_stage",
         stage=LatentPreparationStage(
@@ -117,7 +117,7 @@ def create_pipeline_stages(self, server_args: ServerArgs):
         ),
     )
     
-    # 6. 가서관련 내용
+    # 6. denoising 루프
     self.add_stage(
         stage_name="denoising_stage",
         stage=DenoisingStage(
@@ -126,19 +126,19 @@ def create_pipeline_stages(self, server_args: ServerArgs):
         ),
     )
     
-    # 7. VAE 관련 내용
+    # 7. VAE 디코딩
     self.add_stage(
         stage_name="decoding_stage", 
         stage=DecodingStage(vae=self.get_module("vae"))
     )
 ```
 
-`TextEncodingStage`（`pipelines_core/stages/text_encoding.py`）담당할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (prompt embedding)
+`TextEncodingStage`(`pipelines_core/stages/text_encoding.py`)는 텍스트 prompt를 embedding으로 인코딩하는 일을 맡는다:
 
 ```python
 class TextEncodingStage(PipelineStage):
     def forward(self, batch: Req, server_args: ServerArgs) -> Req:
-        # 관련 내용사용 CLIP 와 T5 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (prompt)
+        # CLIP과 T5로 prompt 인코딩
         prompt_embeds_list, prompt_masks_list, pooler_embeds_list = self.encode_text(
             prompt_text,
             server_args,
@@ -146,7 +146,7 @@ class TextEncodingStage(PipelineStage):
             return_attention_mask=True,
         )
         
-        # 만약관련 내용사용 CFG，도이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (negative prompt)
+        # CFG가 켜져 있으면 negative prompt도 인코딩
         if batch.do_classifier_free_guidance:
             neg_embeds_list, neg_masks_list, neg_pooler_embeds_list = self.encode_text(
                 batch.negative_prompt,
@@ -156,22 +156,22 @@ class TextEncodingStage(PipelineStage):
             )
 ```
 
-FLUX 관련 내용사용관련 내용개이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CLIP pooled embeddings)사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (T5 column embeddings)사용된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+FLUX는 두 개의 텍스트 인코더를 사용한다. CLIP은 전역 조건에 쓰이는 pooled embeddings를 제공하고, T5는 세밀한 텍스트 이해에 쓰이는 시퀀스 embeddings를 제공한다.
 
-`DenoisingStage`（`pipelines_core/stages/denoising.py`）이다관련 내용의 stage，실행한다관련 내용가서관련 내용
+`DenoisingStage`(`pipelines_core/stages/denoising.py`)는 가장 핵심적인 stage로, 반복적인 denoising을 수행한다:
 
 ```python
 class DenoisingStage(PipelineStage):
     def forward(self, batch: Req, server_args: ServerArgs) -> Req:
-        # 초기화 latents
+        # latents 초기화
         latents = batch.latents
         
-        # 관련 내용가서관련 내용
+        # 반복 denoising
         for i, t in enumerate(timesteps):
-            # 관련 내용입력
+            # 입력 준비
             latent_model_input = self.scheduler.scale_model_input(latents, t)
             
-            # Transformer 전관련 내용
+            # Transformer 순전파
             noise_pred = self.transformer(
                 hidden_states=latent_model_input,
                 encoder_hidden_states=prompt_embeds,
@@ -180,24 +180,24 @@ class DenoisingStage(PipelineStage):
                 freqs_cis=freqs_cis,
             )
             
-            # 갱신 latents
+            # latents 갱신
             latents = self.scheduler.step(noise_pred, t, latents)
 ```
 
-### 2.4 모델로드관련 내용
+### 2.4 모델 로딩 흐름
 
-SGLang Diffusion 관련 내용사용 `PipelineComponentLoader` 와서로드관련 내용개관련 내용`runtime/loader/component_loader.py`），관련 내용의로드관련 내용에서 `ComposedPipelineBase` 의 `load_modules` 관련 내용중：
+SGLang Diffusion은 `PipelineComponentLoader`로 각 컴포넌트를 로드하며(`runtime/loader/component_loader.py`), 구체적인 로딩 로직은 `ComposedPipelineBase`의 `load_modules` 메서드에 있다:
 
 ```python
 def load_modules(self, server_args: ServerArgs) -> dict[str, Any]:
-    model_index = self._load_config()  # 읽기 model_index.json
+    model_index = self._load_config()  # model_index.json 읽기
     
     components = {}
     for module_name, (transformers_or_diffusers, architecture) in model_index.items():
         if module_name not in required_modules:
             continue
             
-        # 로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)
+        # 모듈 로드
         module = PipelineComponentLoader.load_module(
             module_name=module_name,
             component_model_path=component_model_path,
@@ -209,48 +209,48 @@ def load_modules(self, server_args: ServerArgs) -> dict[str, Any]:
     return components
 ```
 
-로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다읽기 `model_index.json` 얻는다이 부분은 원문의 해당 기술 설명을 이어서 서술한다설정로드각개이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (transformer), vae, text_encoder 관련 내용응용 TP/SP 관련 내용그리고row관련 내용마지막으로반환한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (pipeline)사용。
+로딩 과정은 비교적 명확하다. `model_index.json`을 읽어 컴포넌트 정보를 얻고, 설정에 따라 각 컴포넌트(transformer, vae, text_encoder 등)를 로드하고, TP/SP 같은 병렬 전략을 적용한 뒤, 마지막으로 컴포넌트 딕셔너리를 반환해 pipeline이 사용하도록 한다.
 
-### 2.5 모델weight로드관련 내용
+### 2.5 모델 가중치 로딩 메커니즘
 
-SGLang Diffusion 의weight로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다대상으로아니관련 내용의관련 내용사용아니관련 내용의로드관련 내용필자는관련 내용하이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)의구현。
+SGLang Diffusion의 가중치 로딩 메커니즘은 꽤 정교하게 설계되어 있어, 컴포넌트 종류마다 서로 다른 로딩 전략을 사용한다. 이 부분의 구현을 자세히 설명한다.
 
-**로드관련 내용모드**
+**로더 팩토리 패턴**
 
-SGLang 로각이 부분은 원문의 해당 기술 설명을 이어서 서술한다모두구현관련 내용의 Loader（`runtime/loader/component_loader.py`）：
+SGLang은 컴포넌트 종류마다 전용 Loader를 구현해 두었다(`runtime/loader/component_loader.py`):
 
 ```python
 class ComponentLoader:
     def load(self, component_model_path, server_args, module_name, transformers_or_diffusers):
-        # 관련 내용로드관련 내용버전
+        # 커스터마이즈 버전 로딩을 우선 시도
         try:
             component = self.load_customized(component_model_path, server_args, module_name)
             source = "customized"
         except Exception:
-            # 관련 내용까지관련 내용버전（transformers/diffusers）
+            # 네이티브 버전(transformers/diffusers)으로 fallback
             component = self.load_native(component_model_path, server_args, transformers_or_diffusers)
             source = "native"
         return component
 ```
 
-관련 내용의좋은관련 내용이다관련 내용사용 SGLang 최적화관련 내용의구현，만약로드관련 내용다시관련 내용까지관련 내용의 transformers/diffusers 구현，이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이런 설계의 장점은 SGLang이 최적화한 구현을 우선 사용하고, 로딩에 실패하면 원래의 transformers/diffusers 구현으로 fallback해 호환성을 보장한다는 점이다.
 
-**Transformer weight로드（FSDP 관련 내용**
+**Transformer 가중치 로딩(FSDP 방식)**
 
-대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Transformer DiT)큰모델，SGLang 관련 내용사용 FSDP（Fully Sharded Data Parallel）와서로드weight：
+Transformer(DiT) 같은 대형 모델에 대해 SGLang은 FSDP(Fully Sharded Data Parallel)로 가중치를 로드한다:
 
 ```python
 class TransformerLoader(ComponentLoader):
     def load_customized(self, component_model_path, server_args, *args):
-        # 1. 읽기설정
+        # 1. 설정 읽기
         config = get_diffusers_component_config(model_path=component_model_path)
         dit_config = server_args.pipeline_config.dit_config
         dit_config.update_model_arch(config)
         
-        # 2. 관련 내용까지관련 내용있다 safetensors 파일
+        # 2. 모든 safetensors 파일 찾기
         safetensors_list = _list_safetensors_files(component_model_path)
         
-        # 3. 관련 내용사용 FSDP 로드모델
+        # 3. FSDP로 모델 로드
         model = maybe_load_fsdp_model(
             model_cls=model_cls,
             init_params={"config": dit_config, "hf_config": hf_config},
@@ -263,30 +263,30 @@ class TransformerLoader(ComponentLoader):
         return model.eval()
 ```
 
-FSDP 의관련 내용이다가능로할 것이다모델파라미터관련 내용까지많은개 GPU 상，지원 CPU offload，관련 내용이다 23.8GB 의 FLUX transformer 도가능에서관련 내용있다관련 내용의 GPU 상로드。
+FSDP의 장점은 모델 파라미터를 여러 GPU에 분할할 수 있고 CPU offload를 지원한다는 점이다. 덕분에 23.8GB짜리 FLUX transformer도 메모리가 제한된 GPU에서 로드할 수 있다.
 
-**Text Encoder weight로드（관련 내용로드）**
+**Text Encoder 가중치 로딩(스트리밍 로딩)**
 
-대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Text Encoder SGLang)사용더관련 내용의관련 내용로드관련 내용
+Text Encoder에 대해서는 SGLang이 더 세밀한 스트리밍 로딩 방식을 사용한다:
 
 ```python
 class TextEncoderLoader(ComponentLoader):
     def load_model(self, model_path, model_config, server_args, dtype="fp16"):
-        # 1. 관련 내용초기화생성한다관련 내용모델
+        # 1. 초기화를 건너뛰고 빈 모델 생성
         with skip_init_modules():
             model_cls, _ = ModelRegistry.resolve_model_cls(architectures)
             model = model_cls(model_config)
         
-        # 2. 관련 내용로드weight
+        # 2. 가중치 스트리밍 로딩
         weights_to_load = {name for name, _ in model.named_parameters()}
         loaded_weights = model.load_weights(
             self._get_all_weights(model, model_path, to_cpu=should_offload)
         )
         
-        # 3. 관련 내용까지관련 내용
+        # 3. 대상 디바이스로 이동
         model = model.to(local_torch_device)
         
-        # 4. 만약이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CPU offload)사용 FSDP
+        # 4. CPU offload가 필요하면 FSDP 사용
         if should_offload:
             shard_model(
                 model,
@@ -297,11 +297,11 @@ class TextEncoderLoader(ComponentLoader):
         return model.eval()
 ```
 
-여기의핵심이다 `skip_init_modules` 상하이 부분은 원문의 해당 기술 설명을 이어서 서술한다된다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (PyTorch)의기본파라미터초기화，이 부분은 원문의 해당 기술 설명을 이어서 서술한다와관련 내용그다음통해 `_get_all_weights` 얻는다weight이 부분은 원문의 해당 기술 설명을 이어서 서술한다로드weight。
+여기서 핵심은 `skip_init_modules` 컨텍스트 매니저다. 이것이 PyTorch의 기본 파라미터 초기화를 건너뛰어 시간과 메모리 낭비를 막아 준다. 그다음 `_get_all_weights`로 가중치 이터레이터를 얻어 스트리밍 방식으로 가중치를 로드한다.
 
-**weight관련 내용구현**
+**가중치 이터레이터 구현**
 
-`_get_all_weights` 반환한다관련 내용개생성한다관련 내용개읽기 safetensors 파일중의weight：
+`_get_all_weights`는 제너레이터를 반환해 safetensors 파일 안의 가중치를 하나씩 읽는다:
 
 ```python
 def _get_weights_iterator(self, source, to_cpu):
@@ -314,19 +314,19 @@ def _get_weights_iterator(self, source, to_cpu):
     else:
         weights_iterator = pt_weights_iterator(hf_weights_files, to_cpu=to_cpu)
     
-    # 응용전관련 내용
+    # prefix 적용
     return ((source.prefix + name, tensor) for (name, tensor) in weights_iterator)
 ```
 
-관련 내용로드의좋은관련 내용이다아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다있다weight로드까지관련 내용가능로관련 내용로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이런 스트리밍 로딩의 장점은 모든 가중치를 한 번에 메모리로 올릴 필요 없이 로드하면서 바로 처리할 수 있어 메모리를 절약한다는 점이다.
 
-**이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight)로드관련 내용**
+**커스텀 가중치 로딩 로직**
 
-각개모델모두구현관련 내용의 `load_weights` 관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight CLIP)의구현：
+모델마다 자체 `load_weights` 메서드를 구현해 가중치 매핑을 처리한다. 예를 들어 CLIP의 구현은 다음과 같다:
 
 ```python
 def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-    # QKV 융합관련 내용
+    # QKV 융합 매핑
     stacked_params_mapping = [
         ("qkv_proj", "q_proj", "q"),
         ("qkv_proj", "k_proj", "k"),
@@ -337,7 +337,7 @@ def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
     loaded_params = set()
     
     for name, loaded_weight in weights:
-        # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (q_proj), k_proj, v_proj -> qkv_proj 의관련 내용
+        # q_proj, k_proj, v_proj -> qkv_proj 매핑 처리
         for param_name, weight_name, shard_id in stacked_params_mapping:
             if weight_name in name:
                 model_param_name = name.replace(weight_name, param_name)
@@ -348,7 +348,7 @@ def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
                     loaded_params.add(model_param_name)
                 break
         else:
-            # 기본로드관련 내용
+            # 기본 로딩 로직
             if name in params_dict:
                 param = params_dict[name]
                 weight_loader = getattr(param, "weight_loader", default_weight_loader)
@@ -358,20 +358,20 @@ def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
     return loaded_params
 ```
 
-여기의 `weight_loader` 이다관련 내용개가능관련 내용의함수，가능로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (QKV)융합、weight분할、이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+여기서 `weight_loader`는 커스터마이즈 가능한 함수로, QKV 융합, 가중치 분할, 데이터 타입 변환 등 다양한 특수 상황을 처리할 수 있다.
 
-**VAE weight로드（관련 내용**
+**VAE 가중치 로딩(단순하고 직접적)**
 
-VAE 관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용 `load_state_dict`：
+VAE는 상대적으로 단순해서 `load_state_dict`를 그대로 사용한다:
 
 ```python
 class VAELoader(ComponentLoader):
     def load_customized(self, component_model_path, server_args, *args):
-        # 1. 생성한다모델
+        # 1. 모델 생성
         vae_cls, _ = ModelRegistry.resolve_model_cls(class_name)
         vae = vae_cls(vae_config).to(target_device)
         
-        # 2. 로드weight
+        # 2. 가중치 로드
         safetensors_list = _list_safetensors_files(component_model_path)
         loaded = safetensors_load_file(safetensors_list[0])
         vae.load_state_dict(loaded, strict=False)
@@ -379,43 +379,43 @@ class VAELoader(ComponentLoader):
         return vae.eval()
 ```
 
-VAE 관련 내용작은（168 MiB），그래서가능로이 부분은 원문의 해당 기술 설명을 이어서 서술한다로드관련 내용있다weight。
+VAE는 비교적 작아서(168 MiB) 모든 가중치를 한 번에 로드해도 된다.
 
-**정리관련 내용하weight로드의관련 내용**：
+**가중치 로딩의 특징 정리**:
 
-1. **이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)** ：아니관련 내용사용아니관련 내용의 Loader，각개 Loader 있다관련 내용와관련 내용로드관련 내용
-2. **관련 내용로드** ：대해관련 내용큰모델（Text Encoder、Transformer），관련 내용사용생성한다관련 내용로드，관련 내용
-3. **FSDP 지원** ：큰모델지원 FSDP 관련 내용와 CPU offload，가능로에서있다관련 내용하로드관련 내용큰모델
-4. **weight관련 내용** ：각개모델가능로관련 내용`load_weights` 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight)와융합
-5. **관련 내용초기화** ：관련 내용사용 `skip_init_modules` 이 부분은 원문의 해당 기술 설명을 이어서 서술한다초기화파라미터
+1. **계층적 설계**: 컴포넌트마다 다른 Loader를 사용하고, 각 Loader는 커스터마이즈 방식과 네이티브 방식 두 가지 로딩 경로를 가진다
+2. **스트리밍 로딩**: 대형 모델(Text Encoder, Transformer)에 대해서는 제너레이터로 스트리밍 로딩해 메모리를 절약한다
+3. **FSDP 지원**: 대형 모델은 FSDP 분할과 CPU offload를 지원하므로, 제한된 메모리에서도 초대형 모델을 로드할 수 있다
+4. **가중치 매핑**: 모델마다 `load_weights` 메서드를 커스터마이즈해 다양한 가중치 매핑과 융합을 처리할 수 있다
+5. **초기화 건너뛰기**: `skip_init_modules`를 사용해 파라미터 초기화에 시간을 낭비하지 않는다
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)가능로높은관련 내용로드관련 내용의모델，이 부분은 원문의 해당 기술 설명을 이어서 서술한다좋은의관련 내용와관련 내용
+이 메커니즘 덕분에 SGLang Diffusion은 다양한 규모의 모델을 효율적으로 로드하면서도 유연성과 확장성을 잘 유지한다.
 
-## 0x3. 그리고row관련 내용상세 해설
+## 0x3. 병렬 전략 상세
 
-관련 내용하와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)의그리고row이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)이다관련 내용높은성능의핵심。관련 내용지원많은관련 내용그리고row관련 내용필자는관련 내용개개와서보다。
+이어서 SGLang Diffusion의 병렬 전략을 이야기한다. 이 부분이 고성능의 핵심이다. 여러 병렬 방식을 지원하는데 하나씩 살펴본다.
 
 ### 3.1 Tensor Parallelism (TP)
 
-TP 관련 내용이다모델의파라미터관련 내용텐서차원분할까지많은개 GPU 상。에서 FLUX 중，주요응용에서 `ReplicatedLinear` 이이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)`runtime/layers/linear.py`）：
+TP는 모델 파라미터를 텐서 차원에 따라 여러 GPU에 분할하는 것이다. FLUX에서는 주로 `ReplicatedLinear`라는 선형 레이어에 적용된다(`runtime/layers/linear.py`):
 
 ```python
 class ReplicatedLinear(nn.Module):
-    """지원 TP 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)
+    """TP를 지원하는 선형 레이어"""
     def forward(self, x):
-        # 에서 TP 모드하，weight관련 내용분할
+        # TP 모드에서는 가중치가 분할되어 있다
         output = F.linear(x, self.weight, self.bias)
-        # All-reduce 관련 내용결과
+        # All-reduce로 결과 집계
         if self.tp_size > 1:
             output = tensor_model_parallel_all_reduce(output)
         return output
 ```
 
-TP 의좋은관련 내용이다가능로줄인다이 부분은 원문의 해당 기술 설명을 이어서 서술한다사용、관련 내용계산그리고row관련 내용대해큰모델관련 내용있다관련 내용
+TP의 장점은 GPU 한 장당 메모리 사용량을 줄이고 계산 병렬도를 높인다는 점으로, 대형 모델 추론에 큰 도움이 된다.
 
 ### 3.2 Ulysses Sequence Parallelism
 
-Ulysses SP 이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)그리고row관련 내용통해 all-to-all 관련 내용에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)와관련 내용차원관련 내용수행한다분할（`UlyssesAttention` 의구현에서 `runtime/layers/attention/layer.py`）：
+Ulysses SP는 시퀀스 병렬 방법의 하나로, all-to-all 통신을 통해 시퀀스 차원과 head 차원 사이에서 분할을 수행한다(`UlyssesAttention`의 구현은 `runtime/layers/attention/layer.py`에 있다):
 
 ```python
 class UlyssesAttention(nn.Module):
@@ -425,16 +425,16 @@ class UlyssesAttention(nn.Module):
         # Stack QKV
         qkv = torch.cat([q, k, v], dim=0)
         
-        # All-to-all: 에서관련 내용와이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)차원이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+        # All-to-all: head 차원과 시퀀스 차원 사이에서 재분배
         # [3*B, S_local, H, D] -> [3*B, S_global, H_local, D]
         qkv = sequence_model_parallel_all_to_all_4D(
             qkv, scatter_dim=2, gather_dim=1
         )
         
-        # 실행한다 attention
+        # attention 수행
         output = self.attn_impl.forward(q, k, v, ctx_attn_metadata)
         
-        # All-to-all: 관련 내용원본관련 내용
+        # All-to-all: 원래 분포로 복원
         # [B, S_global, H_local, D] -> [B, S_local, H, D]
         output = sequence_model_parallel_all_to_all_4D(
             output, scatter_dim=1, gather_dim=2
@@ -443,11 +443,11 @@ class UlyssesAttention(nn.Module):
         return output
 ```
 
-Ulysses SP 의관련 내용이다관련 내용의：입력단계각개 GPU 관련 내용있다완전한이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)의관련 내용부분와완전한의관련 내용통해 all-to-all 관련 내용할 것이다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)차원 gather、관련 내용차원 scatter，그다음각개 GPU 계산완전한이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)의부분관련 내용마지막으로다시통해 all-to-all 관련 내용원본관련 내용
+Ulysses SP의 동작 원리는 이렇다. 입력 단계에서 각 GPU는 전체 시퀀스의 일부와 전체 head를 가지고 있고, all-to-all 통신으로 시퀀스 차원을 gather하고 head 차원을 scatter한다. 그러면 각 GPU가 전체 시퀀스에 대해 일부 head를 계산하고, 마지막에 다시 all-to-all 통신으로 원래 분포를 복원한다.
 
 ### 3.3 USP (Unified Sequence Parallelism)
 
-USP  Ulysses SP 와 Ring Attention 관련 내용와서（`USPAttention` 의구현도에서 `runtime/layers/attention/layer.py`）：
+USP는 Ulysses SP와 Ring Attention을 결합한 것이다(`USPAttention`의 구현도 `runtime/layers/attention/layer.py`에 있다):
 
 ```python
 class USPAttention(nn.Module):
@@ -458,66 +458,66 @@ class USPAttention(nn.Module):
             k = _usp_input_all_to_all(k, head_dim=2)
             v = _usp_input_all_to_all(v, head_dim=2)
         
-        # Ring Attention（만약관련 내용사용）
+        # Ring Attention(활성화된 경우)
         if get_ring_parallel_world_size() > 1:
             out = ring_attn(q, k, v, attn_impl=self.attn_impl)
         else:
             out = self.attn_impl.forward(q, k, v, ctx_attn_metadata)
         
-        # Ulysses-style All-to-All（관련 내용
+        # Ulysses-style All-to-All(복원)
         if get_ulysses_parallel_world_size() > 1:
             out = _usp_output_all_to_all(out, head_dim=2)
         
         return out
 ```
 
-USP  Ulysses 와 Ring 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다와서，그리고row설정더관련 내용대해이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)있다사용。
+USP는 Ulysses와 Ring의 장점을 결합해 병렬 설정이 더 유연하고, 초장문 시퀀스에 특히 유용하다.
 
 ### 3.4 CFG Parallelism
 
-Classifier-Free Guidance (CFG) 그리고row이다관련 내용의계산할당까지아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (GPU)상：
+Classifier-Free Guidance (CFG) 병렬은 positive 조건과 negative 조건의 계산을 서로 다른 GPU에 분배하는 것이다:
 
 ```python
-# 에서 DenoisingStage 중
+# DenoisingStage 내부
 if batch.do_classifier_free_guidance:
-    # CFG rank 0 계산관련 내용
-    # CFG rank 1 계산관련 내용
+    # CFG rank 0은 positive 조건을 계산
+    # CFG rank 1은 negative 조건을 계산
     cfg_rank = get_classifier_free_guidance_rank()
     
     if cfg_rank == 0:
-        noise_pred = transformer(latents, pos_prompt_embeds,...)
+        noise_pred = transformer(latents, pos_prompt_embeds, ...)
     else:
-        noise_pred = transformer(latents, neg_prompt_embeds,...)
+        noise_pred = transformer(latents, neg_prompt_embeds, ...)
     
-    # All-gather 관련 내용결과
+    # All-gather로 결과 수집
     noise_pred = cfg_model_parallel_all_gather(noise_pred, dim=0)
     
-    # 관련 내용
+    # 예측 결합
     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 ```
 
-### 3.5 그리고row관련 내용에서모델중의관련 내용사용
+### 3.5 모델에서의 병렬 컴포넌트 사용
 
-이들그리고row관련 내용에서아니관련 내용모델중의관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다필자는로관련 내용개관련 내용모델로관련 내용설명。
+이 병렬 컴포넌트들은 모델이 달라도 사용 방식이 거의 같다. 전형적인 모델 몇 가지를 예로 설명한다.
 
-**FLUX 모델중의관련 내용사용**（`runtime/models/dits/flux.py`）：
+**FLUX 모델에서의 사용**(`runtime/models/dits/flux.py`):
 
 ```python
 class FluxAttention(nn.Module):
-    def __init__(self, query_dim, num_heads,...):
-        # TP 지원：관련 내용사용 ReplicatedLinear
+    def __init__(self, query_dim, num_heads, ...):
+        # TP 지원: ReplicatedLinear 사용
         self.to_q = ReplicatedLinear(query_dim, self.inner_dim, bias=bias)
         self.to_k = ReplicatedLinear(query_dim, self.inner_dim, bias=bias)
         self.to_v = ReplicatedLinear(query_dim, self.inner_dim, bias=bias)
         
-        # 출력관련 내용도사용 ReplicatedLinear
+        # 출력 projection에도 ReplicatedLinear 사용
         self.to_out = torch.nn.ModuleList([])
         self.to_out.append(
             ReplicatedLinear(self.inner_dim, self.out_dim, bias=out_bias)
         )
         
-        # 관련 내용사용 USPAttention 지원이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)그리고row
+        # USPAttention을 사용해 시퀀스 병렬 지원
         self.attn = USPAttention(
             num_heads=num_heads,
             head_size=self.head_dim,
@@ -529,14 +529,14 @@ class FluxAttention(nn.Module):
         )
 ```
 
-FLUX 의관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)모두사용 `ReplicatedLinear` 관련 내용의 `nn.Linear`，관련 내용에서관련 내용사용 TP 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (weight)된다관련 내용분할。Attention layer관련 내용사용 `USPAttention`，가능로관련 내용지원 Ulysses 와 Ring 그리고row。
+FLUX의 모든 선형 레이어는 표준 `nn.Linear` 대신 `ReplicatedLinear`로 교체되어 있어, TP를 켜면 가중치가 자동으로 분할된다. Attention 레이어는 `USPAttention`을 사용하므로 Ulysses와 Ring 병렬을 동시에 지원할 수 있다.
 
-**HunyuanVideo 모델중의관련 내용사용**（`runtime/models/dits/hunyuanvideo.py`）：
+**HunyuanVideo 모델에서의 사용**(`runtime/models/dits/hunyuanvideo.py`):
 
 ```python
 class MMDoubleStreamBlock(nn.Module):
-    def __init__(self, hidden_size, num_attention_heads,...):
-        # QKV 관련 내용사용 ReplicatedLinear
+    def __init__(self, hidden_size, num_attention_heads, ...):
+        # QKV projection에 ReplicatedLinear 사용
         self.img_attn_qkv = ReplicatedLinear(
             hidden_size, hidden_size * 3, bias=qkv_bias
         )
@@ -544,7 +544,7 @@ class MMDoubleStreamBlock(nn.Module):
             hidden_size, hidden_size * 3, bias=qkv_bias
         )
         
-        # 관련 내용사용 UlyssesAttention
+        # UlyssesAttention 사용
         self.attn = UlyssesAttention(
             num_heads=num_attention_heads,
             head_size=head_dim,
@@ -553,19 +553,19 @@ class MMDoubleStreamBlock(nn.Module):
         )
 ```
 
-HunyuanVideo 관련 내용사용의이다 `UlyssesAttention` 관련 내용아니이다 `USPAttention`，왜냐하면관련 내용아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Ring Attention)이선택관련 내용모델의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)와그리고row관련 내용
+HunyuanVideo는 `USPAttention`이 아니라 `UlyssesAttention`을 사용하는데, Ring Attention이 필요 없기 때문이다. 이 선택은 모델의 시퀀스 길이와 병렬 요구에 따라 달라진다.
 
-**WanVideo 모델중의관련 내용사용**（`runtime/models/dits/wanvideo.py`）：
+**WanVideo 모델에서의 사용**(`runtime/models/dits/wanvideo.py`):
 
 ```python
 class WanVideoSelfAttentionBlock(nn.Module):
-    def __init__(self, dim, num_heads,...):
-        # QKV 관련 내용
+    def __init__(self, dim, num_heads, ...):
+        # QKV projection
         self.to_q = ReplicatedLinear(dim, dim, bias=True)
         self.to_k = ReplicatedLinear(dim, dim, bias=True)
         self.to_v = ReplicatedLinear(dim, dim, bias=True)
         
-        # 관련 내용사용관련 내용의 UlyssesAttention_VSA（Video Sparse Attention）
+        # 특수한 UlyssesAttention_VSA(Video Sparse Attention) 사용
         self.attn1 = UlyssesAttention_VSA(
             num_heads=num_heads,
             head_size=dim // num_heads,
@@ -576,16 +576,16 @@ class WanVideoSelfAttentionBlock(nn.Module):
         )
 ```
 
-WanVideo 관련 내용사용관련 내용의 `UlyssesAttention_VSA`，관련 내용이다대상으로관련 내용생성한다최적화의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)
+WanVideo는 특수한 `UlyssesAttention_VSA`를 사용하는데, 이는 비디오 생성에 맞춰 최적화된 sparse attention 변형이다.
 
-부터이들관련 내용가능로보다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)의그리고row관련 내용사용관련 내용
-- 관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)사용 `ReplicatedLinear` 이 부분은 원문의 해당 기술 설명을 이어서 서술한다지원 TP
-- Attention layer관련 내용선택 `UlyssesAttention`、`USPAttention` 또는관련 내용
-- 아니관련 내용전이 부분은 원문의 해당 기술 설명을 이어서 서술한다그리고row관련 내용에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+이 예시들에서 알 수 있듯이 SGLang Diffusion의 병렬 컴포넌트 사용 방식은 매우 일관적이다:
+- 모든 선형 레이어를 `ReplicatedLinear`로 교체해 TP를 자동으로 지원한다
+- Attention 레이어는 필요에 따라 `UlyssesAttention`, `USPAttention` 또는 특수 변형을 선택한다
+- 순전파 로직을 수정할 필요가 없고, 병렬 통신은 컴포넌트 내부에서 자동으로 처리된다
 
-### 3.6 그리고row관련 내용설정
+### 3.6 병렬 전략 설정
 
-이들그리고row관련 내용모두가능로통해명령row파라미터와서설정：
+이 병렬 전략들은 모두 커맨드라인 인자로 설정할 수 있다:
 
 ```bash
 # TP=2, Ulysses=2
@@ -606,30 +606,30 @@ sglang serve --model-path FLUX.1-dev \
     --num-gpus 2
 ```
 
-## 0x4. Attention Backend 상세 해설
+## 0x4. Attention Backend 상세
 
-SGLang Diffusion 지원많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention backend)가능로관련 내용와관련 내용선택관련 내용의구현。
+SGLang Diffusion은 여러 attention backend를 지원하며, 하드웨어와 상황에 맞춰 최적의 구현을 선택할 수 있다.
 
-### 4.1 Backend 선택관련 내용
+### 4.1 Backend 선택 메커니즘
 
-Backend 선택관련 내용에서 `runtime/layers/attention/selector.py` 중：
+Backend 선택 로직은 `runtime/layers/attention/selector.py`에 있다:
 
 ```python
 def get_attn_backend(head_size: int, dtype: torch.dtype, 
                      supported_attention_backends: set[AttentionBackendEnum]) -> AttentionBackend:
-    # 관련 내용와관련 내용선택 backend
+    # 플랫폼과 하드웨어에 따라 backend 선택
     backend_cls_str = current_platform.get_attn_backend_cls_str(
         selected_backend, head_size, dtype
     )
     
-    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (backend)
+    # backend 클래스 동적 import
     backend_cls = import_from_string(backend_cls_str)
     return backend_cls()
 ```
 
 ### 4.2 FlashAttention Backend
 
-기본관련 내용사용의이다 FlashAttention 이높은성능 attention 구현（`runtime/layers/attention/backends/flash_attn.py`）：
+기본으로 사용되는 것은 FlashAttention이라는 고성능 attention 구현이다(`runtime/layers/attention/backends/flash_attn.py`):
 
 ```python
 class FlashAttentionImpl(AttentionImpl):
@@ -649,53 +649,53 @@ class FlashAttentionImpl(AttentionImpl):
         return output
 ```
 
-FlashAttention 관련 내용사용의이다 sgl-kernel 의최적화구현，지원 FA3（Hopper）와 FA4（Blackwell），관련 내용높은관련 내용도빠른。
+FlashAttention은 sgl-kernel의 최적화 구현을 사용하며 FA3(Hopper)와 FA4(Blackwell)를 지원한다. 메모리 효율이 높고 속도도 빠르다.
 
-### 4.3 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Backend)
+### 4.3 그 외 Backend
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FlashAttention SGLang Diffusion)지원이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (backend Torch SDPA PyTorch)구현，관련 내용좋은）、Sage Attention（대상으로이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)최적화）、Sliding Tile Attention（관련 내용생성한다）、Video Sparse Attention（이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (attention)줄인다계산이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (VMOBA Attention MoBA attention)
+FlashAttention 외에도 SGLang Diffusion은 몇 가지 backend를 더 지원한다: Torch SDPA(PyTorch 네이티브 구현, 호환성이 좋다), Sage Attention(긴 시퀀스에 맞춘 최적화), Sliding Tile Attention(비디오 생성에 적합), Video Sparse Attention(sparse attention, 계산량 감소), VMOBA Attention(비디오 MoBA attention).
 
-Backend 선택관련 내용
+Backend 선택 로직:
 
 ```python
-# CUDA 관련 내용
+# CUDA 플랫폼
 if selected_backend == AttentionBackendEnum.FA:
     if is_blackwell():
-        set_fa_ver(4)  # 관련 내용사용 FA4
+        set_fa_ver(4)  # FA4 사용
     else:
-        set_fa_ver(3)  # 관련 내용사용 FA3
+        set_fa_ver(3)  # FA3 사용
     return FlashAttentionBackend
 elif selected_backend == AttentionBackendEnum.SAGE_ATTN:
     return SageAttentionBackend
-#... 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (backend)
+# ... 그 외 backend
 ```
 
 ### 4.4 Backend 설정
 
-가능로통해관련 내용변수와서선택 backend：
+환경 변수로 backend를 선택할 수 있다:
 
 ```bash
-# 관련 내용사용 FlashAttention
+# FlashAttention 사용
 export SGLANG_DIFFUSION_ATTENTION_BACKEND=fa
 
-# 관련 내용사용 Sage Attention
+# Sage Attention 사용
 export SGLANG_DIFFUSION_ATTENTION_BACKEND=sage_attn
 
-# 관련 내용사용 Torch SDPA
+# Torch SDPA 사용
 export SGLANG_DIFFUSION_ATTENTION_BACKEND=torch_sdpa
 ```
 
-## 0x5. 추가새모델지원관련 내용
+## 0x5. 새 모델 지원 추가 흐름
 
-필자는관련 내용하추가새모델의관련 내용로 FLUX.1-dev 로관련 내용
+새 모델을 추가하는 흐름을 FLUX.1-dev를 예로 정리해 봤다:
 
 ```mermaid
 graph TD
-    A[관련 내용] --> B[관련 내용모델설정]
-    B --> C[구현 Transformer 모델]
-    C --> D[구현 Pipeline]
-    D --> E[관련 내용모델]
-    E --> F[설정그리고row관련 내용]
+    A[시작] --> B[모델 설정 정의]
+    B --> C[Transformer 모델 구현]
+    C --> D[Pipeline 구현]
+    D --> E[모델 등록]
+    E --> F[병렬 전략 설정]
     F --> G[완료]
     
     B --> B1[configs/models/dits/flux.py<br/>FluxArchConfig, FluxConfig]
@@ -703,64 +703,64 @@ graph TD
     B --> B3[configs/pipeline_configs/flux.py<br/>FluxPipelineConfig]
     
     C --> C1[runtime/models/dits/flux.py<br/>FluxTransformer2DModel]
-    C --> C2[이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CachableDiT)]
-    C --> C3[구현 forward 관련 내용]
+    C --> C2[CachableDiT 상속]
+    C --> C3[forward 메서드 구현]
     
     D --> D1[runtime/pipelines/flux.py<br/>FluxPipeline]
-    D --> D2[이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (ComposedPipelineBase)]
-    D --> D3[create_pipeline_stages<br/>추가관련 내용개 stage]
+    D --> D2[ComposedPipelineBase 상속]
+    D --> D3[create_pipeline_stages<br/>각 stage 추가]
     
     E --> E1[registry.py<br/>register_configs]
     
     F --> F1[TP 지원: ReplicatedLinear<br/>tensor_model_parallel_all_reduce]
     F --> F2[Ulysses SP: UlyssesAttention<br/>sequence_model_parallel_all_to_all]
-    F --> F3[에서 Transformer Block 중<br/>관련 내용사용대응의 Attention layer]
+    F --> F3[Transformer Block에서<br/>대응하는 Attention 레이어 사용]
 ```
 
-관련 내용와서이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+구체적으로는 다음 단계로 나뉜다:
 
-1. 관련 내용모델설정
-   - `configs/models/dits/flux.py`: 관련 내용`FluxArchConfig` 와 `FluxConfig`，관련 내용모델관련 내용파라미터
-   - `configs/models/vaes/flux.py`: 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (VAE)설정
-   - `configs/pipeline_configs/flux.py`: 관련 내용`FluxPipelineConfig`，이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (DiT VAE Text Encoder)
+1. 모델 설정 정의
+   - `configs/models/dits/flux.py`: 모델 아키텍처 파라미터를 담은 `FluxArchConfig`와 `FluxConfig`를 정의한다
+   - `configs/models/vaes/flux.py`: VAE 설정을 정의한다
+   - `configs/pipeline_configs/flux.py`: `FluxPipelineConfig`를 정의하고 DiT, VAE, Text Encoder 등의 컴포넌트를 지정한다
 
-2. 구현 Transformer 모델
-   - `runtime/models/dits/flux.py`: 구현 `FluxTransformer2DModel`，관련 내용`CachableDiT`
-   - 에서 `__init__` 중초기화이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer embedding transformer blocks)
-   - 구현 `forward` 이 부분은 원문의 해당 기술 설명을 이어서 서술한다전이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+2. Transformer 모델 구현
+   - `runtime/models/dits/flux.py`: `CachableDiT`를 상속하는 `FluxTransformer2DModel`을 구현한다
+   - `__init__`에서 각 레이어(embedding, transformer blocks 등)를 초기화한다
+   - `forward` 메서드를 구현해 순전파 로직을 정의한다
 
-3. 구현 Pipeline
-   - `runtime/pipelines/flux.py`: 구현 `FluxPipeline`，관련 내용`ComposedPipelineBase`
-   - 에서 `create_pipeline_stages` 중추가관련 내용개 stage（TextEncodingStage、DenoisingStage 관련 내용
-   - 각개 stage 통해 `self.get_module()` 얻는다대응의관련 내용
+3. Pipeline 구현
+   - `runtime/pipelines/flux.py`: `ComposedPipelineBase`를 상속하는 `FluxPipeline`을 구현한다
+   - `create_pipeline_stages`에서 각 stage(TextEncodingStage, DenoisingStage 등)를 추가한다
+   - 각 stage는 `self.get_module()`로 대응하는 컴포넌트를 가져온다
 
-4. 관련 내용모델
-   - `registry.py`: 호출한다 `register_configs` 할 것이다모델관련 내용와설정관련 내용
+4. 모델 등록
+   - `registry.py`: `register_configs`를 호출해 모델 경로와 설정 클래스를 연결한다
 
-5. 설정그리고row관련 내용
-   - TP 지원：에서이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (layer)중관련 내용사용 `ReplicatedLinear`，에서전관련 내용후호출한다 `tensor_model_parallel_all_reduce`
-   - Ulysses SP 지원：에서 Transformer Block 의 attention layer관련 내용사용 `UlyssesAttention` 또는 `USPAttention`
-   - 에서모델초기화관련 내용`server_args.tp_size`、`server_args.ulysses_degree` 관련 내용파라미터설정그리고row
+5. 병렬 전략 설정
+   - TP 지원: 선형 레이어에서 `ReplicatedLinear`를 사용하고, 순전파 뒤에 `tensor_model_parallel_all_reduce`를 호출한다
+   - Ulysses SP 지원: Transformer Block의 attention 레이어에서 `UlyssesAttention` 또는 `USPAttention`을 사용한다
+   - 모델 초기화 시 `server_args.tp_size`, `server_args.ulysses_degree` 등의 인자에 따라 병렬을 설정한다
 
-## 0x6. Profiler 관련 내용사용
+## 0x6. Profiler 사용
 
-SGLang Diffusion 관련 내용성능분석이 부분은 원문의 해당 기술 설명을 이어서 서술한다의성능관련 내용와관련 내용의 torch profiler。필자는관련 내용소개관련 내용하。
+SGLang Diffusion은 두 가지 성능 분석 도구를 제공한다. 경량 성능 로그와 상세한 torch profiler다. 각각 소개한다.
 
-### 6.1 성능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Performance Logger)
+### 6.1 성능 로그(Performance Logger)
 
-성능관련 내용`runtime/utils/perf_logger.py`）가능로기록각개 stage 와 denoising step 의관련 내용
+성능 로그(`runtime/utils/perf_logger.py`)는 각 stage와 denoising step의 소요 시간을 기록할 수 있다:
 
 ```bash
-# 관련 내용성능관련 내용목차
+# 성능 로그 디렉터리 설정
 export SGLANG_PERF_LOG_DIR=/path/to/logs
 
-# 시작관련 내용
+# 서비스 시작
 sglang serve --model-path black-forest-labs/FLUX.1-dev --port 3000
 ```
 
-성능관련 내용된다관련 내용기록까지 `SGLANG_PERF_LOG_DIR` 목차，관련 내용각개 stage 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TextEncodingStage DenoisingStage)각개 denoising step 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Git commit hash)와관련 내용
+성능 로그는 `SGLANG_PERF_LOG_DIR` 디렉터리에 자동으로 기록되며, 각 stage의 소요 시간(TextEncodingStage, DenoisingStage 등), 각 denoising step의 소요 시간, 전체 추론 시간, Git commit hash와 타임스탬프를 포함한다.
 
-관련 내용로 JSON，가능로관련 내용사용관련 내용분석：
+로그 형식은 JSON이라 스크립트로 분석할 수 있다:
 
 ```python
 import json
@@ -775,58 +775,58 @@ for stage, duration in data['stages'].items():
 
 ### 6.2 Torch Profiler
 
-만약관련 내용더관련 내용의성능분석，가능로사용 torch profiler（구현에서 `DenoisingStage` 의 `start_profile`/`stop_profile` 관련 내용중）。torch profiler 가능로기록 CPU 와 GPU 의관련 내용실행한다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (operator)사용、kernel 호출한다관련 내용
+더 상세한 성능 분석이 필요하면 torch profiler를 사용할 수 있다(`DenoisingStage`의 `start_profile`/`stop_profile` 메서드에 구현되어 있다). torch profiler는 연산자 소요 시간, 메모리 사용량, kernel 호출 등 CPU와 GPU의 상세한 실행 정보를 기록할 수 있다.
 
-관련 내용사용 torch profiler 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다에서 `sglang generate` 명령중관련 내용`--profile` 파라미터관련 내용 (row)
+torch profiler를 켜는 방법은 아주 간단하다. `sglang generate` 명령에 `--profile` 인자를 추가하기만 하면 된다:
 
 ```bash
-# 관련 내용사용 --profile 관련 내용사용 profiler
+# --profile로 profiler 활성화
 sglang generate --model-path black-forest-labs/FLUX.1-dev \
     --prompt "A cute baby sea otter" \
     --profile \
-    --num-profiled-timesteps 8  # 가능관련 내용기록전 8 개 denoising step
+    --num-profiled-timesteps 8  # 선택: 앞의 8개 denoising step만 기록하도록 지정
 ```
 
-Profiler 설정파라미터：
+Profiler 설정 파라미터:
 
 ```python
-# 에서 DenoisingStage 중의설정
+# DenoisingStage 내부의 설정
 self.profiler = torch.profiler.profile(
     activities=[
         torch.profiler.ProfilerActivity.CPU,
-        torch.profiler.ProfilerActivity.CUDA,  # 만약 CUDA 가능사용
+        torch.profiler.ProfilerActivity.CUDA,  # CUDA를 사용할 수 있는 경우
     ],
     schedule=torch.profiler.schedule(
-        skip_first=0,  # 아니이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-        wait=0,        # 아니관련 내용
-        warmup=1,      # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1)
-        active=batch.num_profiled_timesteps,  # 기록관련 내용개수의관련 내용
-        repeat=5,      # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (5)
+        skip_first=0,  # 어떤 스텝도 건너뛰지 않음
+        wait=0,        # 대기 없음
+        warmup=1,      # 1 스텝 warmup
+        active=batch.num_profiled_timesteps,  # 지정한 개수만큼 스텝 기록
+        repeat=5,      # 5회 반복
     ),
-    record_shapes=True,   # 기록텐서shape
-    with_stack=True,      # 기록호출한다관련 내용
+    record_shapes=True,   # 텐서 shape 기록
+    with_stack=True,      # 호출 스택 기록
 )
 ```
 
-Profiler 출력：
+Profiler 출력:
 
-생성한다의 trace 파일저장에서 `./logs` 목차하，관련 내용로 `{request_id}-rank{rank}.trace.json.gz`。가능로관련 내용사용 Chrome 의 `chrome://tracing` 또는 TensorBoard 관련 내용보다：
+생성된 trace 파일은 `./logs` 디렉터리에 저장되며 형식은 `{request_id}-rank{rank}.trace.json.gz`이다. Chrome의 `chrome://tracing`이나 TensorBoard로 볼 수 있다:
 
 ```bash
-# 관련 내용사용 TensorBoard 관련 내용보다
+# TensorBoard로 보기
 tensorboard --logdir=./logs
 
-# 또는관련 내용에서 Chrome 중켜다 trace 파일
-# 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (chrome://tracing)그다음로드.trace.json.gz 파일
+# 또는 Chrome에서 trace 파일을 직접 열기
+# chrome://tracing 에 접속한 뒤 .trace.json.gz 파일을 로드
 ```
 
-Profiler 의좋은관련 내용이다볼 수 있다각개 CUDA kernel 의실행한다관련 내용분석 CPU 와 GPU 관련 내용의동기화 overhead，관련 내용성능이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (kernel)시작overhead이 부분은 원문의 해당 기술 설명을 이어서 서술한다지원많은관련 내용분석，각개 rank 생성한다독립의 trace 파일。
+Profiler의 장점은 각 CUDA kernel의 실행 시간을 볼 수 있고, CPU와 GPU 사이의 동기화 오버헤드를 분석하며, 성능 병목(예를 들어 메모리 복사나 kernel 실행 오버헤드)을 식별할 수 있다는 점이다. 게다가 멀티 GPU 분석도 지원해 rank마다 독립적인 trace 파일을 생성한다.
 
-다만관련 내용주의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Profiler)된다관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row overhead)아니권장관련 내용대해관련 내용큰모델，권장만 profile 적은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (timesteps 3-8)만약관련 내용까지 OOM，가능로관련 내용`record_shapes=False` 와 `with_stack=False` 와서줄인다관련 내용사용。
+다만 몇 가지 주의할 점이 있다. Profiler는 어느 정도 런타임 오버헤드를 추가하므로 프로덕션 환경에서는 켜지 않는 편이 좋다. 대형 모델의 경우 메모리 초과를 피하기 위해 적은 수의 timestep(예를 들어 3-8 스텝)만 profile하기를 권한다. OOM이 발생하면 `record_shapes=False`와 `with_stack=False`로 설정해 메모리 사용량을 줄일 수 있다.
 
-## 0x7. 관련 내용사용예제
+## 0x7. 사용 예시
 
-### 7.1 관련 내용
+### 7.1 설치
 
 ```bash
 # Use the latest release branch
@@ -841,18 +841,18 @@ pip install -e "python[diffusion]"
 uv pip install -e "python[diffusion]" --prerelease=allow
 ```
 
-### 7.2 시작관련 내용
+### 7.2 서비스 실행
 
 ```bash
-# 관련 내용
+# 단일 GPU 추론
 sglang serve --model-path black-forest-labs/FLUX.1-dev --port 3000
 
-또는관련 내용
+또는
 
 sglang generate --model-path black-forest-labs/FLUX.1-dev \
     --prompt "A logo With Bold Large text: SGL Diffusion"
 
-# 많은관련 내용 (TP)
+# 멀티 GPU TP
 sglang serve --model-path black-forest-labs/FLUX.1-dev \
     --tp-size 2 --num-gpus 2 --port 3000
 
@@ -861,7 +861,7 @@ sglang serve --model-path black-forest-labs/FLUX.1-dev \
     --ulysses-degree 2 --num-gpus 2 --port 3000
 ```
 
-### 7.3 호출한다 API
+### 7.3 API 호출
 
 ```python
 import requests
@@ -869,7 +869,7 @@ import base64
 from PIL import Image
 from io import BytesIO
 
-# 관련 내용
+# 요청 전송
 response = requests.post(
     "http://127.0.0.1:3000/v1/images/generations",
     headers={"Content-Type": "application/json"},
@@ -882,14 +882,14 @@ response = requests.post(
     }
 )
 
-# 관련 내용이미지
+# 이미지 디코딩
 result = response.json()
 image_data = base64.b64decode(result["data"][0]["b64_json"])
 image = Image.open(BytesIO(image_data))
 image.save("output.png")
 ```
 
-관련 내용개log：
+로그를 하나 붙여 둔다:
 
 ```shell
 sglang serve --model-path black-forest-labs/FLUX.1-dev --port 3000
@@ -899,7 +899,7 @@ sglang serve --model-path black-forest-labs/FLUX.1-dev --port 3000
 [12-05 09:17:00] Diffusers version: 0.30.0.dev0
 [12-05 09:17:00] Loading pipeline modules from config: {'_class_name': 'FluxPipeline', '_diffusers_version': '0.30.0.dev0', 'scheduler': ['diffusers', 'FlowMatchEulerDiscreteScheduler'], 'text_encoder': ['transformers', 'CLIPTextModel'], 'text_encoder_2': ['transformers', 'T5EncoderModel'], 'tokenizer': ['transformers', 'CLIPTokenizer'], 'tokenizer_2': ['transformers', 'T5TokenizerFast'], 'transformer': ['diffusers', 'FluxTransformer2DModel'], 'vae': ['diffusers', 'AutoencoderKL']}
 [12-05 09:17:00] Loading required components: ['text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'vae', 'transformer', 'scheduler']
-Loading required modules:   0%|                                                                                                                                                       | 0/7 [00:00<?,?it/s][12-05 09:17:00] Loading text_encoder using transformers from /root/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-dev/snapshots/3de623fc3c33e44ffbe2bad470d0f45bccf2eb21/text_encoder
+Loading required modules:   0%|                                                                                                                                                       | 0/7 [00:00<?, ?it/s][12-05 09:17:00] Loading text_encoder using transformers from /root/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-dev/snapshots/3de623fc3c33e44ffbe2bad470d0f45bccf2eb21/text_encoder
 [12-05 09:17:00] Loading text_encoder from /root/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-dev/snapshots/3de623fc3c33e44ffbe2bad470d0f45bccf2eb21/text_encoder
 [12-05 09:17:00] HF model config: {'architectures': ['CLIPTextModel'], 'attention_dropout': 0.0, 'bos_token_id': 0, 'dropout': 0.0, 'eos_token_id': 2, 'hidden_act': 'quick_gelu', 'hidden_size': 768, 'initializer_factor': 1.0, 'initializer_range': 0.02, 'intermediate_size': 3072, 'layer_norm_eps': 1e-05, 'max_position_embeddings': 77, 'num_attention_heads': 12, 'num_hidden_layers': 12, 'pad_token_id': 1, 'projection_dim': 768, 'vocab_size': 49408}
 [12-05 09:17:00] Using FlashAttention (FA3 for hopper, FA4 for blackwell) backend
@@ -999,89 +999,89 @@ Loading required modules: 100%|████████████████�
 [12-05 09:22:03] 127.0.0.1:46656 - "POST /v1/images/generations HTTP/1.1" 200
 ```
 
-이이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FLUX.1-dev)모델부터시작까지생성한다관련 내용이미지의완전한관련 내용필자는관련 내용와서관련 내용하관련 내용개단계：
+이 로그는 FLUX.1-dev 모델이 기동부터 이미지 한 장을 생성하기까지의 전체 과정을 보여준다. 소스 코드와 함께 각 단계를 설명한다:
 
-**1. 관련 내용시작와초기화（09:14:31 - 09:14:38）**
+**1. 서비스 기동과 초기화(09:14:31 - 09:14:38)**
 
-먼저관련 내용`server_args`，볼 수 있다핵심설정：
-- `num_gpus=1, tp_size=1`：이 부분은 원문의 해당 기술 설명을 이어서 서술한다있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TP)
-- `ulysses_degree=1, ring_degree=1`：관련 내용있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (column)그리고row
-- `dit_cpu_offload=true, text_encoder_cpu_offload=true, vae_cpu_offload=true`：DiT、Text Encoder 와 VAE 모두이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CPU offload)이다위해관련 내용
+먼저 `server_args`가 출력되는데, 여기서 주요 설정을 확인할 수 있다:
+- `num_gpus=1, tp_size=1`: 단일 GPU 추론으로 TP를 켜지 않았다
+- `ulysses_degree=1, ring_degree=1`: 시퀀스 병렬을 켜지 않았다
+- `dit_cpu_offload=true, text_encoder_cpu_offload=true, vae_cpu_offload=true`: DiT, Text Encoder, VAE 모두 CPU offload를 켰다. 메모리를 절약하기 위해서다
 
-그다음초기화이 부분은 원문의 해당 기술 설명을 이어서 서술한다만있다이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang)이다된다초기화 Gloo 관련 내용위해코드관련 내용
+그다음 분산 환경을 초기화한다. GPU가 한 장뿐이지만 SGLang 내부에서는 (코드를 통일하기 위해) 여전히 Gloo 통신 그룹을 초기화한다.
 
-**2. 모델로드단계（09:14:41 - 09:17:46）**
+**2. 모델 로딩 단계(09:14:41 - 09:17:46)**
 
-관련 내용부분대응 `ComposedPipelineBase.load_modules` 관련 내용의실행한다：
+이 부분은 `ComposedPipelineBase.load_modules` 메서드의 실행에 대응한다:
 
 ```python
-# 읽기 model_index.json，관련 내용이다 FluxPipeline
+# model_index.json을 읽어 이것이 FluxPipeline임을 식별
 [12-05 09:14:41] Downloaded model_index.json for black-forest-labs/FLUX.1-dev, pipeline: FluxPipeline
 ```
 
-그다음관련 내용로드 7 개관련 내용대응 `FluxPipelineConfig._required_config_modules`）：
+그다음 7개 컴포넌트를 순서대로 로드한다(`FluxPipelineConfig._required_config_modules`에 대응):
 
-- **text_encoder (CLIP)**：로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1.68s 234.7 MiB)사용 FlashAttention backend
-- **text_encoder_2 (T5)**：로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (15.89s 8.9 GiB)이다관련 내용큰의관련 내용
-- **tokenizer & tokenizer_2**：로드관련 내용빠른，만이다설정파일
-- **vae**：로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (1s 168 MiB)
-- **transformer (DiT)**：로드이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (18s 22.2 GiB 11.90B)파라미터，관련 내용이다관련 내용모델
-- **scheduler**：로드설정
+- **text_encoder (CLIP)**: 로딩에 1.68s, 234.7 MiB, FlashAttention backend 사용
+- **text_encoder_2 (T5)**: 로딩에 15.89s, 8.9 GiB, 가장 큰 컴포넌트다
+- **tokenizer & tokenizer_2**: 설정 파일뿐이라 로딩이 아주 빠르다
+- **vae**: 로딩에 1s, 168 MiB
+- **transformer (DiT)**: 로딩에 18s, 22.2 GiB, 11.90B 파라미터로 핵심 모델이다
+- **scheduler**: 설정 로딩
 
-관련 내용개로드관련 내용사용이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (3)주요관련 내용에서하관련 내용와로드 transformer 와 text_encoder_2 상。
+전체 로딩 과정에 약 3분이 걸렸고, 주된 시간은 transformer와 text_encoder_2를 내려받고 로드하는 데 쓰였다.
 
-**3. Pipeline 생성한다（09:17:46）**
+**3. Pipeline 생성(09:17:46)**
 
 ```python
 [12-05 09:17:46] Pipelines instantiated
 [12-05 09:17:46] Worker 0: Initialized device, model, and distributed environment.
 ```
 
-여기호출한다 `FluxPipeline.create_pipeline_stages`，생성한다 7 개 stage：InputValidationStage、TextEncodingStage、ConditioningStage、TimestepPreparationStage、LatentPreparationStage、DenoisingStage、DecodingStage。
+여기서 `FluxPipeline.create_pipeline_stages`를 호출해 7개 stage를 생성했다: InputValidationStage, TextEncodingStage, ConditioningStage, TimestepPreparationStage, LatentPreparationStage, DenoisingStage, DecodingStage.
 
-**4. 관련 내용단계（09:21:32 - 09:22:03）**
+**4. 추론 단계(09:21:32 - 09:22:03)**
 
-관련 내용까지관련 내용후，관련 내용실행한다관련 내용개 stage：
+요청을 받으면 각 stage를 순서대로 실행한다:
 
 ```python
-# 관련 내용파라미터
+# 샘플링 파라미터
 width=1024, height=1024, infer_steps=50, guidance_scale=1.0
 
-# 관련 내용개 stage 의관련 내용
-[InputValidationStage] 0.0003s        # 검증입력파라미터
-[TextEncodingStage] 19.1504s          # CLIP + T5 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (FA4 warmup)
-[ConditioningStage] 0.0001s           # 관련 내용
-[TimestepPreparationStage] 0.0924s    # 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
-[LatentPreparationStage] 0.0005s      # 초기화 latent
-[DenoisingStage] 9.0389s              # 50 관련 내용가서관련 내용각이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (0.1804s)
-[DecodingStage] 1.8255s               # VAE 관련 내용
+# 각 stage의 소요 시간
+[InputValidationStage] 0.0003s        # 입력 파라미터 검증
+[TextEncodingStage] 19.1504s          # CLIP + T5 인코딩, FA4 warmup 포함
+[ConditioningStage] 0.0001s           # 조건 준비
+[TimestepPreparationStage] 0.0924s    # timestep 준비
+[LatentPreparationStage] 0.0005s      # latent 초기화
+[DenoisingStage] 9.0389s              # 50 스텝 denoising, 스텝당 평균 0.1804s
+[DecodingStage] 1.8255s               # VAE 디코딩
 ```
 
-볼 수 있다 TextEncodingStage 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (19.15s)이다왜냐하면：
-1. 제이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row warmup FlashAttention 4)`Running FA4 warmup`）
-2. T5 모델관련 내용큰（8.9 GiB），관련 내용느린
-3. 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CPU offload)에서 CPU 와 GPU 이 부분은 원문의 해당 기술 설명을 이어서 서술한다
+TextEncodingStage의 소요 시간이 가장 길다(19.15s). 그 이유는 다음과 같다:
+1. 첫 실행에서는 FlashAttention 4의 warmup이 필요하다(`Running FA4 warmup`)
+2. T5 모델이 매우 크고(8.9 GiB) 인코딩이 비교적 느리다
+3. CPU offload를 켜서 CPU와 GPU 사이에서 데이터를 옮겨야 한다
 
-DenoisingStage 이다제관련 내용의（9.04s），관련 내용이다관련 내용의가서관련 내용실행한다 50 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (transformer)전관련 내용
+DenoisingStage가 두 번째로 오래 걸린다(9.04s). 핵심 denoising 루프로, transformer 순전파를 50 스텝 실행한다.
 
-**5. 관련 내용분석**
+**5. 총 소요 시간 분석**
 
 ```python
 [12-05 09:22:03] Pixel data generated successfully in 30.35 seconds
 ```
 
-이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (30.35)여기서：
+총 30.35초이며, 그 내역은 다음과 같다:
 - TextEncodingStage: 19.15s (63%)
 - DenoisingStage: 9.04s (30%)
 - DecodingStage: 1.83s (6%)
-- 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (stage: < 0.1s)
+- 그 외 stage: < 0.1s
 
-만약이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (CPU offload)또는관련 내용사용많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TP/SP)성능된다있다관련 내용향상。이관련 내용좋은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)각개 stage 의관련 내용모두관련 내용기록하와서，관련 내용성능분석와최적화。
+CPU offload를 끄거나 멀티 GPU TP/SP를 사용하면 성능이 뚜렷하게 좋아진다. 이 로그는 SGLang Diffusion의 모듈화된 설계를 잘 보여준다. 각 stage의 소요 시간이 명확하게 기록되어 성능 분석과 최적화에 편리하다.
 
-### 7.4 명령row생성한다
+### 7.4 커맨드라인 생성
 
 ```bash
-# 관련 내용생성한다이미지
+# 이미지 직접 생성
 sglang generate --model-path black-forest-labs/FLUX.1-dev \
     --prompt "A Logo With Bold Large Text: SGL Diffusion" \
     --save-output
@@ -1091,11 +1091,11 @@ sglang generate --model-path black-forest-labs/FLUX.1-dev \
 
 ## 0x8. 정리
 
-이 글기록필자는대해 SGLang Diffusion 관련 내용의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (SGLang Diffusion)통해 ComposedPipelineBase + PipelineStage 의이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (block)개관련 내용의관련 내용모델이 부분은 원문의 해당 기술 설명을 이어서 서술한다지원관련 내용의그리고row이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (TP Ulysses SP USP CFG Parallel)와많은이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Attention Backend FlashAttention Sage Attention)가능로높은관련 내용배포관련 내용모델。추가새모델의관련 내용도관련 내용만관련 내용구현설정이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (Transformer)모델、Pipeline 관련 내용그리고이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (row)통해 ReplicatedLinear 와 UlyssesAttention 관련 내용가능로관련 내용지원그리고row。
+이 글은 SGLang Diffusion 소스 코드에 대해 이해한 내용을 기록한 것이다. SGLang Diffusion은 ComposedPipelineBase + PipelineStage의 모듈화 설계를 통해 비교적 유연한 diffusion 모델 추론 프레임워크를 제공한다. 풍부한 병렬 전략(TP, Ulysses SP, USP, CFG Parallel)과 여러 Attention Backend(FlashAttention, Sage Attention 등)를 지원해 다양한 diffusion 모델을 효율적으로 배포할 수 있다. 새 모델을 추가하는 흐름도 비교적 명확해서, 설정 클래스와 Transformer 모델, Pipeline 클래스를 구현하고 등록하기만 하면 되며, ReplicatedLinear와 UlyssesAttention 같은 컴포넌트를 통해 병렬을 손쉽게 지원할 수 있다.
 
 ## 참고 자료
 
-- SGLang Diffusion 이 부분은 원문의 해당 기술 설명을 이어서 서술한다 (:)https://lmsys.org/blog/2025-11-07-sglang-diffusion/
+- SGLang Diffusion 공식 블로그: https://lmsys.org/blog/2025-11-07-sglang-diffusion/
 - SGLang GitHub: https://github.com/sgl-project/sglang
 - FastVideo: https://github.com/hao-ai-lab/FastVideo
 - FLUX.1 모델: https://huggingface.co/black-forest-labs/FLUX.1-dev
