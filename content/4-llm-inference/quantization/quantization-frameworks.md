@@ -102,16 +102,23 @@ torch.ops.quantized_decomposed.dequantize_per_channel
 
 ```python
 from torchao.quantization import quantize_, Int4WeightOnlyConfig
-quantize_(model, Int4WeightOnlyConfig())
+model_w4a16 = quantize_(model, Int4WeightOnlyConfig())
 ```
 
-내부적으로 `nn.Linear.weight`가 `AffineQuantizedTensor` 같은 subclass instance로 swap된다. graph는 여전히 `F.linear(x, w)` 형태.
+내부적으로 `nn.Linear.weight`가 `Int4Tensor` 같은 subclass instance로 swap된다.
+
+```bash
+>>> print(type(model_w4a16).__name__)
+'Int4Tensor'
+```
+
+graph는 여전히 `F.linear(x, w)` 형태.
 
 **Subclass 종류**:
 
 | Tensor | 용도 | 저장 |
 |---|---|---|
-| `AffineQuantizedTensor` | int4 / int8 weight | int data + (scale, zero_point, block_size) |
+| `Int8Tensor` | int8 weight | int data + (scale, zero_point, block_size) |
 | `Float8Tensor` | FP8 training / inference | FP8 data + per-tensor/row scale |
 | `MX*Tensor` | MX format | low-precision data + `float8_e8m0fnu` scale |
 | `NVFP4Tensor` | NVFP4 | packed FP4 + two-level scale |
