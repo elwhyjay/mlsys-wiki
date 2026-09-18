@@ -11,6 +11,8 @@
 #   - Sync only ever deletes a content file if its mapping line is removed AND you
 #     confirm it as an orphan (see the orphan report at the end). It never deletes
 #     automatically.
+#   - unclassified/ 는 소스 3곳의 미러(tvm_mlir_learn / optim_cuda / leetcuda)만
+#     매번 재생성한다. 그 밖에 직접 넣어둔 폴더는 보존된다.
 set -e
 
 WIKI="$(cd "$(dirname "$0")" && pwd)"
@@ -139,8 +141,11 @@ echo ""
 echo "=== Unclassified (source mirror, git-ignored) ==="
 
 UNCLASSIFIED="$WIKI/unclassified"
-rm -rf "$UNCLASSIFIED"
 mkdir -p "$UNCLASSIFIED"
+
+# 미러 디렉토리만 관리 대상. unclassified/ 아래 직접 넣어둔 자료
+# (colfax_blog, reed_blog 처럼 소스 3곳이 아닌 것)는 sync가 건드리지 않는다.
+MIRRORED=""
 
 # Build set of mapped src paths for each source (for fast lookup)
 # Format: "source\tsrc_rel"
@@ -149,6 +154,8 @@ mapped_srcs=$(grep -v '^#' "$MAPPING" | grep -v '^[[:space:]]*$' | awk -F'\t' '{
 mirror_unclassified() {
   local src_root="$1" label="$2" src_key="$3"
   local dst_root="$UNCLASSIFIED/$label"
+  rm -rf "$dst_root"
+  MIRRORED="$MIRRORED $dst_root"
 
   find "$src_root" -name "*.md" ! -name "_raw.md" | while read f; do
     rel="${f#$src_root/}"
@@ -164,7 +171,7 @@ mirror_unclassified "$TVM"      "tvm_mlir_learn" "tvm"
 mirror_unclassified "$CUDA"     "optim_cuda"     "cuda"
 mirror_unclassified "$LEETCUDA" "leetcuda"       "leetcuda"
 
-unc_count=$(find "$UNCLASSIFIED" -name "*.md" | wc -l | tr -d ' ')
+unc_count=$(find $MIRRORED -name "*.md" | wc -l | tr -d ' ')
 echo "  $unc_count files → $UNCLASSIFIED"
 echo "  (원본 폴더 구조 그대로 미러. mapping.tsv에 추가 후 재실행하면 위키에 반영됨)"
 
