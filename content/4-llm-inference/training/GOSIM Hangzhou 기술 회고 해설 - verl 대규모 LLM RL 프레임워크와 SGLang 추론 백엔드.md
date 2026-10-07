@@ -17,19 +17,19 @@
 
 LMSYS의 slime blog는 여기서 비교해 보기 좋다. verl과 slime은 같은 project가 아니지만 같은 system problem을 다룬다. RL training framework는 계속 rollout을 생성해야 하고, rollout은 high-throughput inference engine이 필요하다. training weights가 update되면 inference engine은 새 parameter를 빠르게 synchronize해야 한다. slime의 system diagram은 매우 직관적이다.
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/001.png)
 
 slime의 design은 SGLang-native에 더 가깝다. rollout server group, router, weight sync, partial rollout이 모두 SGLang 중심으로 전개된다. verl은 general RL orchestration framework에 더 가깝고, FSDP/Megatron, vLLM/SGLang, Ray worker를 unified controller 아래에 둔다. 이 slides를 읽을 때 slime을 comparison group으로 보면 좋다. SGLang만 serve한다면 많은 path를 더 tight하게 쓸 수 있지만, 여러 training/inference backend를 지원하려면 verl 같은 더 abstract한 dispatch/collect, worker group, backend adapter가 필요하다.
 
 LMSYS의 또 다른 deterministic inference blog도 Agentic RL에 참고할 가치가 있다. 이 blog가 다루는 문제는 같은 prompt와 같은 sampling parameter에서 distributed inference와 multi-turn rollout이 재현 가능한가이다. RL training에서는 reward fluctuation 자체가 큰데, rollout engine까지 batch shape, kernel path, scheduling order 때문에 추가 randomness를 만들면 debugging이 매우 괴로워진다. slime/SGLang의 deterministic route는 training system에 "reproducible experiment"를 위한 safety line을 더하는 것으로 이해할 수 있다.
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/002.png)
 
 ## 0x2. Slides 페이지별 해설
 
 #### Slide 1: verl: Agentic Tasks를 위한 대규모 LLM RL 프레임워크
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/003.png)
 
 title에는 두 keyword가 있다: Large-Scale과 Agentic Tasks. 전자는 verl이 single-card RL demo가 아니라 actor, critic, reference, reward, rollout engine을 distributed resources 위에 올리는 것을 목표로 한다는 뜻이다. 후자는 rollout이 더 이상 단 한 번의 `generate`가 아니라 tool calling, environment execution, multi-turn dialogue와 섞인다는 뜻이다.
 
@@ -37,7 +37,7 @@ SGLang directory에서 볼 때 가장 중요한 연결점은 rollout backend다.
 
 #### Slide 2: Project background
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/004.png)
 
 이 페이지는 ByteDance Seed Team을 소개한다. technical main text 관점에서는 배경 설명이다. verl은 장기간 RLHF, reasoning, agent, tool-use를 해야 하는 team에서 나왔으므로 design target은 특정 algorithm을 한 번 run하는 것이 아니라 여러 RL algorithm, training backend, inference backend를 지속적으로 연결하는 것이다.
 
@@ -45,7 +45,7 @@ SGLang directory에서 볼 때 가장 중요한 연결점은 rollout backend다.
 
 #### Slide 3: Seed team project background
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/005.png)
 
 이 페이지는 Seed team entry를 이어서 보여준다. technical diagram은 아니지만 talk의 context를 보충한다. verl이 serve하는 것은 계속 evolve하는 model과 task의 묶음이지, one-off paper reproduction experiment가 아니다. large model post-training에서는 algorithm recipe, data, evaluation, rollout throughput, weight sync가 모두 자주 바뀐다.
 
@@ -53,7 +53,7 @@ SGLang directory에서 볼 때 가장 중요한 연결점은 rollout backend다.
 
 #### Slide 4: Boundary between SFT and RL
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/006.png)
 
 이 페이지는 SFT와 RL의 차이를 명확하게 압축한다. SFT는 labeled sample에서 학습하므로 보통 "one model + one static dataset"으로 main flow를 설명할 수 있다. RL은 reward를 기반으로 optimize하며, training data는 current policy가 생성한다. policy가 한 번 update될 때마다 다음 round rollout distribution도 바뀐다.
 
@@ -61,7 +61,7 @@ SGLang directory에서 볼 때 가장 중요한 연결점은 rollout backend다.
 
 #### Slide 5: Why LLM RL needs a system framework
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/007.png)
 
 이 페이지의 timeline은 2023 human alignment에서 2024 reasoning을 거쳐 2025 agents로 간다. 말하고 싶은 것은 RL task shape가 변하고 있다는 점이다. RLHF는 주로 preference를 optimize했고, reasoning은 verifiable answer를 도입하기 시작했으며, agentic LLM은 tool, desktop operation, coding assistant, game environment를 training에 포함해야 한다.
 
@@ -69,7 +69,7 @@ system pressure도 함께 변한다. ordinary reward model scoring은 상대적�
 
 #### Slide 6: RL dataflow is much more complex than supervised learning
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/008.png)
 
 이 dataflow diagram은 verl 입문의 핵심이다. slide에는 RL can be modeled as complex dataflow graph라고 적혀 있고, multiple models, multiple stages, multiple workloads가 있다. multiple models는 actor, critic, reference, reward model을 포함한다. multiple stages는 generation, experience preparation, training을 포함한다. multiple workloads는 각각 generation, inference, training에 대응한다.
 
@@ -77,7 +77,7 @@ system pressure도 함께 변한다. ordinary reward model scoring은 상대적�
 
 #### Slide 7: Large-scale distributed dataflow
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/009.png)
 
 이 페이지는 LLM RL의 각 dataflow operator 자체가 large-scale distributed workload라는 점을 강조한다. training side는 Qwen 235B, DeepSeek 671B 같은 model scale을 감당하기 위해 Megatron-LM/FSDP 같은 ND parallelism을 써야 한다. sequence length도 8k에서 1M으로 올라가며, single batch shape만으로도 이미 충분히 복잡하다.
 
@@ -85,7 +85,7 @@ distributed setting에서는 dataflow가 더 이상 local function call이 아�
 
 #### Slide 8: Dependencies and resource limitations in RL dataflow
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/010.png)
 
 title에는 두 단어가 있다: Data Dependencies와 Resource Limitations. data dependency는 generation 이후에야 reward/logprob/value를 계산할 수 있고, advantage가 나온 뒤에야 training할 수 있다는 뜻이다. resource limitation은 actor, critic, reference, rollout engine이 자주 같은 GPU나 같은 GPU memory budget을 두고 경쟁한다는 뜻이다.
 
@@ -93,7 +93,7 @@ title에는 두 단어가 있다: Data Dependencies와 Resource Limitations. dat
 
 #### Slide 9: Community and adoption
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/011.png)
 
 Community page는 10k+ stars, 1k+ forks, 1.1k+ PRs, 250+ contributors, 그리고 TinyZero, SimpleRL-Zoo, rllm, SkyThought, OpenManus-RL 같은 project를 나열한다. 이는 verl이 더 이상 paper adjunct code가 아니라 많은 RL project가 underlying system으로 사용하는 framework가 되었음을 보여준다.
 
@@ -101,7 +101,7 @@ community adoption은 interface를 더 general하게 만들도록 압박한다. 
 
 #### Slide 10: verl feature surface
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/012.png)
 
 이 페이지는 verl의 highlight features를 나열한다. Hybrid Controller는 PPO/GRPO 같은 RL dataflow를 적은 code로 표현하게 한다. 3D-HybridEngine은 training과 generation stage의 actor resharding을 담당한다. modular APIs는 FSDP, Megatron-LM, vLLM, SGLang을 reuse한다. device mapping은 다른 GPU placement를 지원하고, large MoE도 support 범위 안에 있다.
 
@@ -109,7 +109,7 @@ SGLang user에게 핵심은 "Seamless integration of existing LLM infra"다. SGL
 
 #### Slide 11: Hybrid Controller: keep control flow in Python
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/013.png)
 
 이 페이지는 Pathways의 그림을 빌려 두 distributed programming paradigm을 설명한다. 왼쪽 Single-Controller(MPMD)는 central controller 하나가 모든 worker를 관리하고, 서로 다른 worker는 서로 다른 program을 실행할 수 있다. 그림의 긴 step k는 global scheduling을 나타내고, 아래 host/dev timeline에는 send/recv, computation, wait가 있다. 오른쪽 Multi-Controller(SPMD)는 각 worker가 자기 controller를 갖고 같은 program을 다른 data로 실행한다. 그림에서는 step k, step k+1이 여러 device에서 synchronized하게 진행되고, read/write는 각 controller 안에서 일어난다.
 
@@ -117,7 +117,7 @@ verl은 Hybrid Controller를 선택한다. 둘을 합친 것이다. algorithm la
 
 #### Slide 12: Single Controller driving multiple Workers
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/014.png)
 
 이 페이지는 Hybrid Controller를 `Single Controller + N x Multi-Controller`로 그린다. 왼쪽 single controller는 prompts를 받고 `Gen`을 trigger한다. prompts+responses를 받은 뒤 ref logprob, actor logprob, values, reward를 차례로 호출하고, 마지막에 experiences로 합쳐 actor update와 critic update로 보낸다. 오른쪽의 두 3D GPU mesh는 worker group 내부의 parallel structure를 나타낸다. zero data parallel, pipeline parallel, model parallel이 모두 있을 수 있고, controller는 각 kernel이 어떻게 배치되는지 알 필요가 없다.
 
@@ -125,7 +125,7 @@ verl은 Hybrid Controller를 선택한다. 둘을 합친 것이다. algorithm la
 
 #### Slide 13: Dispatch/Collect data distribution semantics
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/015.png)
 
 왼쪽은 RL flow를 세 stage로 나눈다. Generation stage에서는 prompts가 actor로 들어가 responses를 생성한다. Experience Preparation stage에서는 prompts & responses에 대해 reference log prob, actor log prob, values, reward를 각각 계산한다. Training stage는 buffer의 experiences로 actor/critic을 update한다. 오른쪽 code도 정확히 이 순서에 대응한다. `actor.generate_sequences(prompts)`, 이어서 `reward.compute_reward`, `reference.compute_log_prob`, `critic.compute_values`, `compute_advantage(batch, "gae")`, 마지막에 `critic.update_critic`와 `actor.update_actor`다.
 
@@ -133,7 +133,7 @@ Dispatch/Collect는 이 single-machine Python처럼 보이는 flow가 multiple w
 
 #### Slide 14: FSDP, Megatron, vLLM, SGLang backends
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/016.png)
 
 이 페이지는 multi-controller가 붙일 수 있는 backend를 펼쳐 놓는다. parallel algorithm은 DP, TP, PP, context/sequence parallel을 포함한다. training backend는 FSDP, FSDP2, Megatron, torchtitan을 포함한다. inference backend는 vLLM과 SGLang을 포함한다. kernel side에서는 FlashAttention, torch compile, Liger Kernel도 사용할 수 있다.
 
@@ -141,7 +141,7 @@ Dispatch/Collect는 이 single-machine Python처럼 보이는 flow가 multiple w
 
 #### Slide 15: 3D-HybridEngine and colocate
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/017.png)
 
 이 페이지는 colocate strategy와 split strategy를 구분한다. colocate는 training과 generation stage에 같은 GPU group을 사용하고, split은 두 stage가 서로 다른 group을 사용한다. 아래 예시에서 training은 `TP=4, DP=2, PP=1`이고 generation은 `TP=2, DP=4, PP=1`이다. Train에서 Gen으로 가는 arrow는 같은 GPU가 stage 전환 때 regroup하고 weights를 synchronize해야 함을 나타낸다. 그림의 `All-Gather within Micro-DP group`은 weights가 training slicing shape에서 inference가 필요한 full/resharded shape로 바뀌는 것에 대응한다.
 
@@ -149,7 +149,7 @@ slide 아래 두 줄은 따로 봐야 한다. 3D-HybridEngine에서 colocate는 
 
 #### Slide 16: verl programming style
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/018.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/018.png)
 
 이 페이지는 verl programming interface를 보여준다. slide의 작은 글자는 직설적이다. single-controller 안의 각 call, 예를 들어 `critic.compute_values`, `actor.update_actor`는 본질적으로 multi-controller worker group으로 보내는 RPC다. `register` decorator는 dataflow node 사이의 distributed data transfer를 관리한다.
 
@@ -157,7 +157,7 @@ slide 아래 두 줄은 따로 봐야 한다. 3D-HybridEngine에서 colocate는 
 
 #### Slide 17: Agentic RL section transition
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/019.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/019.png)
 
 이 페이지는 section transition이며, Agentic RL로 들어간다. 앞에서는 ordinary RL dataflow와 Hybrid Controller를 말했고, 뒤에서는 scheduling이 더 어려운 rollout을 처리한다. model은 tool을 call하고, environment return을 기다리고, observation을 context에 다시 쓴 뒤, generation을 계속한다.
 
@@ -165,7 +165,7 @@ slide 아래 두 줄은 따로 봐야 한다. 3D-HybridEngine에서 colocate는 
 
 #### Slide 18: What is an Agent
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/020.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/020.png)
 
 이 페이지는 Agent definition을 준다: software systems that use AI to reasoning, planning, memory and autonomy. slide 아래에는 세 capability가 있다. tool calling은 LLM이 필요에 따라 tool을 선택하게 하고, memory는 agent가 historical step information을 사용하게 하며, planning은 model이 multi-step plan을 세우고 실행하게 한다.
 
@@ -173,7 +173,7 @@ RL framework 관점에서 Agent RL은 complex dynamic environment에서 decision
 
 #### Slide 19: ReTool: tool-calling training
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/021.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/021.png)
 
 이 페이지의 example은 ReTool이다: training LLM to write python code to solve math problem. model은 final answer를 바로 내지 않고 먼저 Python code를 생성하고, environment가 이를 실행한 다음, code output을 바탕으로 계속 reasoning하거나 answer한다. math problem에서는 code execution result가 verifier의 일부가 되기 쉽다.
 
@@ -181,7 +181,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 20: Synchronous rollout problem in Agentic RL
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/022.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/022.png)
 
 이 페이지는 세 timeline으로 rollout orchestration을 비교한다. 맨 위 synchronous rollout에서는 `Initialize Runtime`, `LLM Gen`, `Env Exec`, 다음 round `LLM Gen`이 거의 serial하고, 마지막에야 `Reward Calculation`으로 간다. 가운데 asynchronous rollout은 서로 다른 trajectory를 interleave하게 하며, 어떤 trajectory가 끝나면 새 trajectory를 시작할 수 있지만 reward는 여전히 뒤쪽에 있다. 맨 아래 async rollout + 3-stage producer-consumer pipeline은 runtime initialization, LLM generation, environment execution, reward calculation을 pipeline으로 나누어 여러 trajectory가 동시에 서로 다른 stage에 있을 수 있게 한다.
 
@@ -189,7 +189,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 21: AgentLoop state machine
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/023.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/023.png)
 
 이 페이지는 AgentLoop interface definition을 제시한다. user prompt 하나를 받아 user-defined loop를 실행하고, multi-turn chat history를 trajectory로 output한다. 오른쪽에는 online web search, MCP tools, code sandbox, virtual machine, Android emulator 같은 environment가 나열되어 있다. 즉 rollout은 더 이상 `prompt -> response`가 아니라, model이 action을 계속 생성하고 environment가 observation을 반환하며, 그 observation이 context에 다시 기록되는 loop다.
 
@@ -197,7 +197,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 22: AgentLoop server mode
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/024.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/024.png)
 
 왼쪽 그림은 server mode dataflow를 매우 자세히 그린다. `PPOTrainer`가 `generate_sequences`를 호출하면 `AgentLoop Manager`로 들어가고, Manager는 prompts를 여러 `AgentLoopWorker`에 분배한다. 각 worker 내부에는 `AgentLoop`와 `AsyncLLMServer Manager`가 있으며, 실제 model generation은 아래 `AsyncSglangServer/AsyncvLLMServer`를 통해 model runner group으로 간다. 아래에는 vLLM group 두 개가 표시되어 있고, 각 group은 tensor_parallel_size=4이며, 바깥에는 FSDP group world_size=8도 있다.
 
@@ -205,7 +205,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 23: ReTool with AgentLoop
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/025.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/025.png)
 
 이 페이지는 ReTool reproduction config와 training curves를 함께 둔다. Overview에는 base model이 Qwen/Qwen2.5-32B-Instruct, SFT dataset이 JoeYing/ReTool-SFT, RL dataset이 ByteTsinghua-SIA/DAPO-Math-17k, val dataset이 yentinglin/aime_2025, recipe가 `verl/recipe/retool`이라고 적혀 있다. 아래 stage도 분명하다. stage 1은 SFT, stage 2는 GRPO다.
 
@@ -213,7 +213,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 24: ReTool reproduction lessons
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/026.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/026.png)
 
 이 페이지는 ReTool reproduction experience summary다. slide에는 두 lesson이 적혀 있고, title은 모두 `token-in-token-out vs chat completion`을 가리킨다. 이 conflict는 매우 실제적이다. training framework 내부에서 가장 stable한 것은 token ids, attention mask, response mask 같은 tensor다. 하지만 agent/tool ecosystem은 role, tool call, tool response, multi-modal payload가 들어 있는 chat completion semantic을 자주 사용한다.
 
@@ -221,7 +221,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 25: Roadmap: larger MoE and stronger inference backend
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/027.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/027.png)
 
 이 페이지는 Q3/Q4 Roadmap transition이다. technical detail은 없지만 위치가 중요하다. ordinary RL과 Agentic RL을 다룬 뒤, roadmap은 large MoE, partial rollout, async pipeline, server-style rollout 같은 engineering problem으로 돌아간다.
 
@@ -229,7 +229,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 26: Large MoE RL training updates
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/028.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/028.png)
 
 이 페이지는 Trainer Updates를 다룬다. title은 Scalable RL for large MoE models다. slide는 verl이 이미 DeepSeek-V3-671B 같은 giant MoE에 대한 preview support를 갖췄다고 말한다. training side는 Megatron-Core GPTModel 기반이고, 예시에서 DeepSeek 671B는 96 H20, Qwen3 235B는 32 H20을 사용한다. inference side는 multi-node inference를 지원한다. Hybrid 부분에서는 Megatron-Core V0.12와 latest inference engine 사이의 parameter sharding manager가 필요하다.
 
@@ -237,7 +237,7 @@ ReTool은 ordinary RLHF의 response를 action/observation trajectory로 확장�
 
 #### Slide 27: Partial rollout and async rollout
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/029.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/029.png)
 
 Roadmap page는 네 방향을 나열한다. modular design, partial rollout & fully-async training pipeline, native vLLM/SGLang HTTP server, rollout performance optimizations(fp8)다. 첫 번째는 FSDP2, Megatron 같은 model engine을 더 composable하게 abstract하는 것이고, 세 번째는 slime을 언급하며 SGLang/vLLM server-style rollout이 training framework에 계속 가까워질 것임을 보여준다.
 
@@ -245,7 +245,7 @@ Partial rollout의 핵심은 rollout이 "complete trajectory" 단위로만 train
 
 #### Slide 28: More realistic Agentic tasks
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/030.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/030.png)
 
 이 페이지는 더 realistic한 agentic task를 나열한다. Deep Research, Code/SWE-bench, Multi-modal GUI/browser 등이다. 공통점은 environment가 무거워진다는 것이다. Deep Research는 search와 web page reading이 필요하고, SWE-bench는 code change와 test running이 필요하며, GUI/browser는 screenshot, coordinate, click, input, page state를 다뤄야 한다.
 
@@ -253,7 +253,7 @@ Partial rollout의 핵심은 rollout이 "complete trajectory" 단위로만 train
 
 #### Slide 29: Community collaboration directions
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/031.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/031.png)
 
 이 페이지는 community invitation page이며, verl repository, contacts, community entry를 제시한다. technical하게는 open interface의 reminder로 볼 수 있다. Agentic RL의 task와 environment는 아직 빠르게 변하고 있고, framework는 new algorithm, new tool protocol, new inference backend를 계속 흡수해야 한다.
 
@@ -261,7 +261,7 @@ contributor에게 entry는 algorithm만이 아니다. SGLang rollout adapter, Ag
 
 #### Slide 30: Summary
 
-<img src="img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/032.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-verl-llm-rl-sglang-inference-bb2a3565/032.png)
 
 Summary page는 topic으로 돌아온다. verl의 가치는 특정 RL algorithm이 아니라, complex RL dataflow, distributed worker, rollout server, agent environment를 고치고 조정하고 확장할 수 있는 framework 안에 넣는 것이다.
 

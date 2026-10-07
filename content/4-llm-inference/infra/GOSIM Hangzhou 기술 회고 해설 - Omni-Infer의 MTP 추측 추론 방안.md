@@ -18,7 +18,7 @@ code 위치:
 
 먼저 LMSYS의 이 general flow diagram으로 MTP main loop를 calibrate한 뒤, Omni-Infer로 돌아가 NPU adaptation을 본다.
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/001.png)
 
 이 그림은 MTP를 세 단계로 나눈다. main model이 먼저 current token과 hidden states를 계산하고, MTP module이 hidden states에 따라 여러 token을 연속으로 draft하며, 마지막으로 main model이 이러한 candidate token을 한 번에 verify한다. accept token 수가 1보다 크기만 하면 decode의 serial step 수가 줄어든다. Omni-Infer의 이 slides에서 중점은 Ascend NPU에서 이 flow를 stable하게 실행하는 것이다. sampling info는 repeat/restore 가능해야 하고, KV cache는 여러 candidate token을 위한 space를 남겨야 하며, verify 후에는 rejected token을 다시 지워야 한다. 뒤에서 `mtp.patch`를 볼 때 이 그림을 total index로 삼을 수 있다.
 
@@ -26,7 +26,7 @@ code 위치:
 
 #### Slide 1: Omni-Infer의 MTP: Ascend-friendly high-throughput speculative inference
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/002.png)
 
 title page는 주제를 제시한다. Omni-Infer의 MTP이며, 중점은 Ascend-friendly high-throughput speculative inference다. 여기서 "friendly"는 단순히 NPU를 지원한다는 뜻이 아니라, speculative inference의 sampling, verification, hidden state selection, MLA kernel을 Ascend execution에 적합한 형태로 바꾸는 것을 의미한다.
 
@@ -34,7 +34,7 @@ Decode stage의 single-token iteration은 bandwidth와 synchronization overhead�
 
 #### Slide 2: Decode memory-bound와 speculative inference
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/003.png)
 
 이 page는 Decode stage의 compute characteristic부터 시작한다. iteration마다 request 하나가 token 하나를 input으로 받아 token 하나를 생성하며, compute density가 낮다. Ascend 같은 high compute density/bandwidth ratio hardware에서는 single-token decode가 hardware를 충분히 채우기 어렵다.
 
@@ -42,7 +42,7 @@ speculative inference는 one inference iteration에서 request 하나의 여러 
 
 #### Slide 3: community MTP/EAGLE implementation의 general flow
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/004.png)
 
 이 page는 community에서 흔히 볼 수 있는 MTP/EAGLE execution method를 그린 것이다. prefill 후 main model이 hidden states를 만들고, MTP 또는 draft module이 hidden states를 기반으로 candidate token sequence를 생성한다. decode 시 main model은 이 candidate sequence를 verify하고 prefix token을 accept하며, 이후 state를 다음 draft round에 넘긴다.
 
@@ -50,7 +50,7 @@ speculative inference는 one inference iteration에서 request 하나의 여러 
 
 #### Slide 4: verification 후 token과 hidden state selection
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/005.png)
 
 이 page의 위쪽은 CPU stream과 NPU stream을 나눈다. CPU side는 input preparation과 output processing을 담당하고, NPU side는 main model과 speculative model을 실행한다. prefill stage에서 main model이 hidden states를 만들고, speculative model이 이 hidden states로 candidate token을 생성한다. decode에 들어간 뒤 main model이 먼저 speculative tokens를 verify하고, verified token과 corresponding hidden states를 MTP layer에 넘겨 계속 predict하게 한다.
 
@@ -58,7 +58,7 @@ speculative inference는 one inference iteration에서 request 하나의 여러 
 
 #### Slide 5: CPU-NPU synchronization bubble
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/006.png)
 
 이 page는 Omni-Infer의 MTP implementation으로 들어간다. 그림은 main model, MTP model, verification, sampling을 연결한다. 핵심은 verified token selection, hidden state selection, next draft를 가능한 한 device side에서 완료해 CPU intervention을 줄이는 것이다.
 
@@ -66,7 +66,7 @@ CPU-NPU synchronization bubble은 Ascend scenario의 key issue다. 매 verificat
 
 #### Slide 6: Omni-Infer의 MTP support scope
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/007.png)
 
 이 page는 현재 지원 model을 명확히 나열한다. DeepSeek V3의 MTP, Qwen2의 EAGLE/EAGLE3, Pangu Ultra MoE의 MTP다. 즉 Omni-Infer는 특정 model 하나에 special path를 작성하는 것이 아니라 speculative method를 inference engine capability로 만든다.
 
@@ -74,7 +74,7 @@ model마다 draft module source가 다르다. DeepSeek V3 MTP는 model 자체의
 
 #### Slide 7: sampling과 verification strategy
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/008.png)
 
 이 page는 sampling과 verification의 probability relation을 쓴다. speculative model이 token을 생성할 probability를 `q_i`, main model이 token을 생성할 probability를 `p_i`로 둔다. simple verification이 main model sampling result와 비교해 같으면 accept하고 다르면 reject한다면 acceptance rate는 `sum p_i q_i`와 관련된다. draft가 greedy sample만 수행하면 acceptance rate는 main model이 해당 token에 부여한 probability `p_i`로 degenerate된다.
 
@@ -82,7 +82,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 8: community verifier의 문제
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/009.png)
 
 이 page는 community verifier의 두 가지 문제를 지적한다. 첫째, penalty 같은 다른 sampling parameter가 적용되는 scenario에서 simple verifier는 large model accuracy에 영향을 준다. 둘째, Sampler는 각 input에 token 하나만 있다고 가정한다.
 
@@ -90,7 +90,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 9: validator에서 두 번 sampler를 호출하는 design
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/010.png)
 
 이 page는 verifier의 current state를 그린다. 위쪽 t0/g0/t1/g1...은 interleaved target token과 draft token이고, main model은 이 position들의 logits를 한 번에 output한다. 아래쪽은 logits를 두 Sampler로 나눈다. 한쪽은 target에 대응하는 candidate f0/f1/f2/f3를 sample하고, 다른 쪽은 draft 뒤의 backup token b0/b1/b2/b3를 sample한다. 마지막으로 unified rejection sampler에 들어가 verify & sampling을 수행한다.
 
@@ -98,7 +98,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 10: arbitrary speculative token 수의 sampling parameter 처리
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/011.png)
 
 이 page의 title은 "arbitrary number speculative token support"다. 오른쪽 두 항목은 매우 구체적이다. 첫째, `spec_metadata`에 따라 sampling parameters를 copy해 arbitrary length를 지원한다. 여기에는 allowed token ids, temperature, min_p, top_k, top_p가 포함된다. 둘째, penalty는 penalty cache에 의존하므로 logits를 loop slicing해서 penalty를 적용한다.
 
@@ -106,7 +106,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 11: Adaptive speculation
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/012.png)
 
 이 page title은 "Coming soon: adaptive speculation"이다. 왼쪽 그림에서 파란 `t0/t1/t2/t3`는 main model이 verify한 position이고, 초록 `g0/g3`는 accepted draft token을 나타내며, 빨간 `g1/g2`는 rejected position을 나타낸다. 아래 MTP branch는 계속 `f0/f1/f2/f3`와 `h0/h1/h2/h3`를 만든다. vertical dashed line은 speculative window의 boundary로 이해할 수 있다. 어떤 window는 많이 accept되고, 어떤 window는 빠르게 fail한다.
 
@@ -114,7 +114,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 12: MLA에서 MTP의 KV reuse optimization
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/013.png)
 
 이 page는 MLA operator-level optimization을 설명한다. m개 token을 speculate할 때, MLA computation에서는 `m+1`개의 Q matrix와 같은 K matrix를 multiplication하는 상황이 생긴다. naive implementation은 각 Q가 K를 다시 load하게 만들고, K matrix가 HBM과 L1 사이를 오가며 decode의 bandwidth bottleneck을 키운다.
 
@@ -122,7 +122,7 @@ rejection sampling은 더 strict하다. `min(p_i, q_i) / q_i` probability로 tok
 
 #### Slide 13: Omni-Infer repository와 integration 방식
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/014.png)
 
 repository page는 Omni-Infer의 Gitee address를 제공한다. public implementation에는 vLLM/Ascend adaptation뿐 아니라 SGLang patch도 있다. SGLang patch 안에는 `SpeculativeAlgorithm.MTP`와 `MTPWorker`가 새로 추가되어 있으며, 이는 이 slides의 verifier, sampling info, draft/verify main loop와 직접 대응된다.
 
@@ -130,7 +130,7 @@ code를 읽을 때는 세 가지 clue를 따라가면 된다. 첫째, `MTPWorker
 
 #### Slide 14: 요약
 
-<img src="img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-omni-infer-mtp-8e0d94ea/015.png)
 
 정리하면 Omni-Infer의 MTP는 "EAGLE을 NPU로 옮긴 것"이 아니다. 이는 NPU 위에서 sampler, verifier, graph, MLA, synchronization overhead 같은 실제 engineering detail을 처리하는 것이다.
 

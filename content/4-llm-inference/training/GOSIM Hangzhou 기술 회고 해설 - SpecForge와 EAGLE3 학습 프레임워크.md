@@ -17,11 +17,11 @@ speculative decoding의 serving 쪽은 많이 이야기되지만, 학습 쪽은 
 
 LMSYS의 SpecForge blog는 학습 문제를 더 명확히 설명한다. EAGLE3의 draft model은 token embedding만 먹는 것이 아니라 target model의 여러 중간층 hidden states도 먹는다. 장점은 draft model이 target model의 국소 추론 상태에 더 가까워진다는 점이고, 단점은 학습 흐름이 일반 LM처럼 깨끗하지 않다는 점이다. 먼저 target hidden states를 얻고, 여러 층 hidden states를 투영, 결합, 재귀 unroll해야 한다.
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/001.png)
 
 이 그림이 EAGLE3의 학습 데이터 흐름이다. target model은 logits와 hidden states를 제공하고, draft model은 이 중간 표현으로 뒤 token을 예측한다. 학습 때는 다단계 생성을 시뮬레이션해야 한다. LMSYS blog가 SpecForge가 online/offline 두 경로를 지원한다고 강조하는 이유도 여기에 있다. 온라인으로 target model을 돌리면 학습 때 GPU 압력이 크지만 hidden states 데이터셋이 디스크를 폭발시키지는 않는다. 반대로 hidden states를 먼저 오프라인 생성하면 학습 단계는 훨씬 싸지만 중간 데이터가 매우 커진다.
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/002.jpg" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/002.jpg)
 
 이 online/offline 그림은 코드에서 두 진입점에 대응된다. online 경로는 학습 step 내부에서 target model을 호출해 hidden states를 얻고, offline 경로는 hidden states를 dataset 필드로 읽어 온다. SpecForge 소스 코드를 읽을 때는 이 점만 붙잡으면 길을 잃지 않는다. `Eagle3Model`은 공통 TTT/unroll/loss 로직을 처리하고, online/offline 차이는 hidden states가 어디서 오느냐에 주로 있다. GPT-OSS에 관한 LMSYS blog의 가치도 여기에 있다. SpecForge가 특정 Llama-like 모델만 맞춘 것이 아니라 target backend를 확장 가능한 층으로 만들었고, 새 모델 구조가 바뀌면 hidden states, tokenizer, draft config만 맞추면 된다는 점을 보여준다.
 
@@ -29,49 +29,49 @@ LMSYS의 SpecForge blog는 학습 문제를 더 명확히 설명한다. EAGLE3�
 
 #### Slide 1: SpecForge: Speculative Decoding Models의 학습 프레임워크
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/003.png)
 
 SpecForge가 해결하는 것은 speculative decoding의 "학습 쪽"이다. SGLang은 이미 EAGLE/EAGLE3 draft model을 serve할 수 있지만, draft model을 어디서 가져오고 target model hidden states와 어떻게 정렬하며 특수 attention mask를 어떻게 처리할지는 또 하나의 완전한 엔지니어링 문제다.
 
 #### Slide 2: 목차: speculative decoding에서 커스텀 학습까지
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/004.png)
 
 목차 순서는 명확하다. 먼저 speculative decoding이 왜 decode latency를 낮출 수 있는지 설명하고, 이어서 EAGLE3와 SpecForge를 다룬다. 그다음 GPT-OSS, Flex Attention, VLM, LoRA, 커스텀 학습으로 내려간다. 이것은 단일 모델 스크립트가 아니라 학습 프레임워크다.
 
 #### Slide 3: 왜 decode 단계에 speculative decoding을 쓸 가치가 있는가
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/005.png)
 
 작은 batch decode는 쉽게 memory-bound가 된다. target model은 매 step마다 token 하나만 내기 때문에 GPU 계산 능력을 충분히 쓰지 못한다. speculative decoding은 저렴한 draft model이 한 번에 여러 token을 추측하게 하고, target model이 병렬로 검증하게 한다. 더 많은 계산으로 더 적은 직렬 step을 사는 방식이다.
 
 #### Slide 4: SGLang 안의 EAGLE3 이득
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/006.png)
 
 EAGLE3의 의미는 draft model이 token만 보는 것이 아니라 target model의 중간 hidden states도 본다는 데 있다. SGLang 쪽은 더 높은 acceptance length를 얻을 수 있고, slides에는 Llama3.1-8B에서 약 2.4x의 예가 제시된다.
 
 #### Slide 5: SpecForge의 위치: draft model 학습
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/007.png)
 
 SpecForge의 위치는 "EAGLE3 학습 흐름 표준화"다. target hidden states 생성, draft forward, TTT unroll, loss/accuracy 계산을 프레임워크 안에 감싼다. 사용자는 SafeAILab/EAGLE의 학습 스크립트에서 시작해 직접 손으로 맞출 필요가 줄어든다.
 
 #### Slide 6: 주요 모델과 SGLang을 바로 지원
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/008.png)
 
 바로 지원한다는 말은 단순한 모델명 목록이 아니다. GPT-OSS, Qwen, Llama, Qwen2.5-VL 같은 모델은 tokenizer, hidden state layer 선택, attention backend, FSDP/TP가 모두 다르다. SpecForge는 이런 차이를 target/draft backend 안으로 넣는다.
 
 #### Slide 7: 학습 프레임워크를 SGLang 생태계에 둔 이유
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/009.png)
 
 SGLang 생태계에 두는 장점은 학습과 serving이 같은 모델 가정을 쓸 수 있다는 점이다. 학습된 draft model을 바로 SGLang speculative decoding에 사용할 수 있고, acceptance length 평가도 온라인 행동에 더 가까워진다.
 
 #### Slide 8: EAGLE3의 Training-Time Test
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/010.png)
 
 이 페이지의 왼쪽 그림은 target model과 draft model 두 부분으로 보아야 한다. target model은 train data를 embedding과 여러 decoder 층으로 통과시켜 low/mid/high 세 층 hidden states를 꺼낸다. high hidden은 draft 쪽 high hidden으로 직접 들어가고, 세 층 hidden도 draft 쪽에서 융합된다. draft model 쪽은 먼저 low/mid/high hidden을 FC 한 층에 통과시켜 `g hidden`을 얻고, 입력 token embedding과 합쳐 `fuse hidden`을 만든 뒤 draft decoder로 보낸다. 마지막으로 `plogp_loss`로 draft가 다음 token을 예측하도록 학습한다.
 
@@ -79,7 +79,7 @@ SGLang 생태계에 두는 장점은 학습과 serving이 같은 모델 가정�
 
 #### Slide 9: online/offline hidden states 두 가지 학습 경로
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/011.png)
 
 Online 경로는 위쪽이다. 데이터는 `Train Data -> embedding -> Target Model`을 거쳐 target으로 들어가고, target은 low/mid/high hidden을 출력한다. 세 hidden을 concat한 뒤 FC를 지나 `Fuse Hidden`을 얻는다. 다른 한편 final hidden은 `Target LM Head`로 보내져 logits를 낸다. 점선 박스 오른쪽이 Training-Time Test다. 학습 input ids 자체도 embedding되고, fuse hidden과 함께 draft model에 들어간다. target logits와 draft 출력이 함께 `plogp_loss`를 계산한다. slide에는 "Left Shift Logits and input ids"가 따로 표시되어 있는데, target logits와 학습 token을 한 칸 어긋나게 정렬한다는 뜻이다.
 
@@ -87,7 +87,7 @@ Offline 경로는 아래쪽이다. 왼쪽 `SGLang Phase`는 target model을 미�
 
 #### Slide 10: Online & Offline Training 비교
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/012.png)
 
 표는 네 행이다. Target Model Usage 행은 online 학습이 학습 중 target model을 호출하고, offline은 데이터 준비 단계에서만 target model을 쓴다고 말한다. Disk Space Requirement 행은 가장 직관적인 비용에 대응된다. online은 hidden states를 거의 저장하지 않아 디스크 압력이 낮다. offline은 low/mid/high/final hidden을 디스크에 내려야 하며, slides의 UltraChat + ShareGPT 예시는 약 12TB가 필요하다고 한다. GPU Requirement는 반대다. online은 학습 중 target model과 draft 학습이 같이 있으므로 target이 클수록 GPU 압력이 높다. offline 학습 단계는 draft만 로드하므로 최소 1장 GPU로도 돌릴 수 있다.
 
@@ -95,13 +95,13 @@ Offline 경로는 아래쪽이다. 왼쪽 `SGLang Phase`는 target model을 미�
 
 #### Slide 11: GPT-OSS EAGLE 예시
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/013.png)
 
 GPT-OSS 예시는 SpecForge가 Llama만을 위한 것이 아니라는 점을 보여준다. 오픈소스 모델 구조는 빠르게 변한다. 학습 프레임워크가 target model 세부를 하드코딩하면 금방 쓸 수 없게 된다. SpecForge는 GPT-OSS의 target backend를 별도로 맞추고, draft 쪽은 EAGLE3 로직을 유지한다. 그림의 acceptance length 비교도 draft model 학습 품질이 serving 쪽 처리량으로 바로 나타난다는 점을 상기시킨다.
 
 #### Slide 12: Flex Attention으로 메모리 절감과 가속
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/014.png)
 
 Flex Attention 페이지에는 두 곡선이 있다. 왼쪽은 속도 비교다. 가로축은 sequence length, 세로축은 시간이며, 파란 선은 일반 Eagle(SDPA), 빨간 선은 Flex Attention이다. 시퀀스가 길수록 파란 선은 더 빨리 올라가고 빨간 선은 더 완만하게 증가한다. 오른쪽은 메모리 비교다. 파란 선은 긴 시퀀스에서 90GB 이상으로 올라가지만, 빨간 선은 여전히 10GB 안팎에 머문다. 아래 작은 글자는 10-20x less memory와 H200에서 약 2x speedup을 말한다.
 
@@ -109,19 +109,19 @@ Flex Attention 페이지에는 두 곡선이 있다. 왼쪽은 속도 비교다.
 
 #### Slide 13: VLM도 EAGLE3 draft를 학습할 수 있다
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/015.png)
 
 VLM 페이지에서 핵심은 hidden states가 텍스트에서만 오지 않는다는 점이다. Qwen2.5-VL 같은 모델은 image grid, mrope position id, 시각 token과 텍스트 token 정렬을 처리해야 한다. SpecForge의 VLM wrapper는 target model이 출력한 여러 층 hidden states를 EAGLE3 draft에 연결한다.
 
 #### Slide 14: LoRA와 speculative decoding의 공존
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/016.png)
 
 LoRA 페이지는 배포 현실을 다룬다. 온라인 base model은 여러 LoRA adapter를 동시에 붙일 수 있다. speculative decoding이 base draft만 갱신하고 adapter 쪽 차이를 처리하지 않으면 acceptance rate가 떨어진다. SpecForge/SGLang은 draft/base의 LoRA 상태를 맞춰야 한다.
 
 #### Slide 15: 커스텀 학습 파라미터와 chat template
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/017.png)
 
 커스텀 학습의 첫 단계는 파라미터와 데이터 형식을 연결하는 것이다. 왼쪽 코드는 online 학습 진입점이다. `torchrun --standalone --nproc_per_node 8 ./scripts/train_eagle3_online.py`를 사용하며, 핵심 파라미터는 `--target-model-path meta-llama/Llama-3.1-8B-Instruct`, `--draft-model-config ./configs/llama3-8B-eagle3.json`, `--train-data-path ./cache/dataset/sharegpt.jsonl`, `--output-dir ./outputs/llama3-8b-eagle3`, `--num-epochs 10`, `--batch-size 1`, `--learning-rate 1e-4`, `--max-length 2048`, `--chat-template llama3`, `--cache-dir ./cache`다. 이 파라미터들은 target model, draft config, 학습 데이터, 출력 디렉터리, 컨텍스트 길이를 명시적으로 넘긴다.
 
@@ -129,7 +129,7 @@ LoRA 페이지는 배포 현실을 다룬다. 온라인 base model은 여러 LoR
 
 #### Slide 16: 커스텀 target model과 draft model
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/018.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/018.png)
 
 이 페이지가 모델 접속 입구다. 왼쪽 target model 부분은 HuggingFace가 바로 로드할 수 있는 작은 모델이라면 `--target-model-path`만 바꾸면 된다고 말한다. 모델이 너무 크거나 tensor parallel이 필요하다면 `specforge.modeling.target` 디렉터리에 자체 병렬 버전을 구현해야 한다. 스크린샷의 코드는 커스텀 target model이 distributed target model 클래스를 상속하고, `load_weights` 같은 입구를 구현한 뒤 Auto target model에 등록해야 함을 암시한다.
 
@@ -137,7 +137,7 @@ LoRA 페이지는 배포 현실을 다룬다. 온라인 base model은 여러 LoR
 
 #### Slide 17: 종료 페이지
 
-<img src="img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/019.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-specforge-eagle3-study-aab84e27/019.png)
 
 종료 페이지에는 새로운 기술 포인트가 없다. 주선으로 돌아가 보면, SpecForge의 가치는 EAGLE3 학습에서 가장 유지보수하기 어려운 hidden states, TTT unroll, 특수 mask, 모델 적응을 프레임워크에 넣어, 학습된 draft model이 SGLang serving으로 자연스럽게 들어가게 하는 데 있다.
 

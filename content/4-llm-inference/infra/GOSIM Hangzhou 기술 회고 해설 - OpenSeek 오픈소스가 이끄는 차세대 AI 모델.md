@@ -19,7 +19,7 @@ OpenSeek는 단일 model release가 아니라 data, algorithm, system을 둘러�
 
 #### Slide 1: OpenSeek: 오픈소스가 이끄는 차세대 AI 모델
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/001.png)
 
 Title page는 OpenSeek의 positioning을 제시한다: open-source driven next AI models. 이는 단일 model release가 아니라 data, algorithm, system, evaluation, community contribution을 하나의 open collaboration framework 안에 넣는 시도다.
 
@@ -27,7 +27,7 @@ Title page는 OpenSeek의 positioning을 제시한다: open-source driven next A
 
 #### Slide 2: 목차: Project, data/algorithm, efficiency, future
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/002.png)
 
 목차는 OpenSeek를 네 부분으로 나눈다: project introduction, data and algorithm의 annealing과 RL, attention mechanism evolution, future outlook. 이 순서는 단순히 model score만 말하는 것이 아니라, 먼저 open-source collaboration mechanism을 설명하고, 이어 training recipe를 다룬 뒤, 마지막에 system efficiency로 들어간다는 뜻이다.
 
@@ -35,7 +35,7 @@ Title page는 OpenSeek의 positioning을 제시한다: open-source driven next A
 
 #### Slide 3: OpenSeek Project Introduction
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/003.png)
 
 이 페이지는 project introduction section의 divider다. 뒤에서는 "Theseus's ship"과 "open-source community as shipyard"라는 두 비유로 OpenSeek의 engineering paradigm을 설명한다. model은 한 번 train해서 끝나는 static object가 아니라, data, algorithm, system이 계속 교체된 결과라는 것이다.
 
@@ -43,7 +43,7 @@ OpenSeek가 풀고 싶은 것은 open collaboration 안의 pipeline 문제다. c
 
 #### Slide 4: Theseus's Ship: Engineering paradigm replacement
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/004.png)
 
 이 페이지는 Theseus's ship으로 AI model의 continuous evolution을 설명한다. 왼쪽은 철학적 사고실험이다. 배의 목재가 차례로 교체된 뒤에도 그것이 여전히 원래 배인가? 오른쪽은 engineering paradigm이다. large model의 data, algorithm, system을 지속적으로 교체하는 일을 나무배의 판자를 교체하는 것에 비유한다.
 
@@ -51,7 +51,7 @@ OpenSeek가 풀고 싶은 것은 open collaboration 안의 pipeline 문제다. c
 
 #### Slide 5: Open-source community as shipyard
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/005.png)
 
 이 페이지는 open-source community를 shipyard에 비유한다. 그림 속 세 종류의 contribution은 세 가지 "plank"에 대응한다. pull request는 algorithm plank를 교체하고, data contribution은 data plank를 교체하며, system optimization은 system plank를 교체한다. 여기서 강조하는 것은 code PR만 contribution으로 치는 것이 아니라 data와 compute/system optimization도 model evolution 안으로 들어온다는 점이다.
 
@@ -59,7 +59,7 @@ OpenSeek가 풀고 싶은 것은 open collaboration 안의 pipeline 문제다. c
 
 #### Slide 6: Accumulated innovation and competition mechanism
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/006.png)
 
 Accumulated innovation 페이지는 year-round rolling themed competitions를 말한다. 각 competition은 핵심 plank 하나를 교체하는 데 집중한다. slide에는 iter1 data denoising, iter2 long text, iter3 tool calling, iter4 safety alignment가 나열되어 있다. data, context, agent capability, safety를 정확히 덮는다.
 
@@ -67,7 +67,7 @@ Evaluation dimensions는 performance, resource, code, interpretability를 포함
 
 #### Slide 7: OpenSeek Working Groups
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/007.png)
 
 Working Groups 페이지는 collaboration을 System, Data, Algo로 나눈다. 이 division은 contribution path를 더 명확하게 만든다. data group은 cleaning, synthesis, evaluation set을 맡고, algorithm group은 training recipe, RL, structure change를 맡으며, system group은 training/inference efficiency, kernel, parallelism, deployment를 맡는다.
 
@@ -75,7 +75,7 @@ large model open source에 이런 division이 없으면 repo 하나에 issue만 
 
 #### Slide 8: Nonlinear leap
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/008.png)
 
 Nonlinear leap 페이지는 "plank" 비유를 이어간다. 모든 핵심 plank가 한 번 교체를 마치면 model capability는 experimental wooden boat에서 commercial aircraft carrier로 진화한다. 아래에는 네 가지 변화가 적혀 있다: inference cost 감소, long-context window 증가, tool calling success rate 향상, safety alignment 개선.
 
@@ -83,7 +83,7 @@ Nonlinear leap 페이지는 "plank" 비유를 이어간다. 모든 핵심 plank�
 
 #### Slide 9: Open-source competition and collaboration
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/009.png)
 
 이 페이지는 "Beyond Cup" challenge를 소개한다. slide에는 algorithm과 system dual track, preliminary round에 500개 이상의 team registration, 100개 이상의 team submission, 그중 algorithm track이 60%를 차지한다는 내용이 적혀 있다. 두 track은 각각 top 10 team을 semifinal로 올리고, 뛰어난 solution은 모두 open source로 공개된다.
 
@@ -91,7 +91,7 @@ Competition mechanism의 가치는 contributor에게 명확한 target과 unified
 
 #### Slide 10: OpenSeek timeline
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/010.png)
 
 Timeline은 한 organization의 initiation에서 community-driven open source로 가는 과정을 보여준다. 2025.2는 initiation으로, data와 synthesis를 준비한다. 2025.5 Stage 1은 CCI4.0 dataset, OpenSeek-Small, pipeline을 release한다. 2025.9 Stage 2는 competition을 시작하고 contributor와 함께 OpenSeek-Mid를 train한다. 2025.11 Stage 3는 OpenSeek-Mid(10B), code, data, checkpoint release를 계획한다.
 
@@ -99,7 +99,7 @@ Timeline은 한 organization의 initiation에서 community-driven open source로
 
 #### Slide 11: Data and Algorithm: Annealing + RL
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/011.png)
 
 이 페이지는 두 번째 part의 title이다: data and algorithm, annealing과 RL의 dual-wheel drive. annealing은 mid-training에서 data distribution과 learning rate/training stage를 조정하는 것에 대응하고, RL은 post-training에서 reward를 바탕으로 reasoning 같은 capability를 optimize하는 것에 대응한다.
 
@@ -107,7 +107,7 @@ OpenSeek-Small의 path는 pretrain tokens만 쌓는 방식이 아니라, mid-tra
 
 #### Slide 12: OpenMDW and OpenSeek-Small
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/012.png)
 
 이 페이지는 OpenSeek series model이 OpenMDW protocol을 사용한다고 설명하고, HuggingFace collection과 OpenSeek-Small-v1-SFT link를 제시한다. OpenMDW의 핵심은 AI model open collaboration을 위한 더 명확한 license foundation을 주어 data, model, derivative work가 규칙 아래에서 공유될 수 있게 하는 것이다.
 
@@ -115,7 +115,7 @@ Engineering reproduction 관점에서 link 자체가 전부는 아니다. 정말
 
 #### Slide 13: Efficiency direction
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/013.png)
 
 이 페이지는 Model Efficiency section transition이며, 뒤에서 training method와 attention mechanism으로 들어간다. OpenSeek에서 efficiency는 별도의 "deployment optimization"이 아니라 model structure, training recipe, long-context capability와 묶여 있다.
 
@@ -123,7 +123,7 @@ long-context attention의 `O(N^2)` cost는 training과 inference를 제한한다
 
 #### Slide 14: Training method overview
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/014.png)
 
 Training method overview page의 title은 OpenSeek의 training way이며, mathematical reasoning capability 향상을 강조한다. 그림은 training을 Mid-training과 Post-training으로 나눈다. 전자는 high-quality professional data를 사용하고, 후자는 instruction tuning과 reinforcement learning을 사용한다.
 
@@ -131,7 +131,7 @@ OpenSeek-Small config를 보면 MoE, router, group top-k 같은 training configu
 
 #### Slide 15: Mid-training two stages
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/015.png)
 
 Mid-training page에는 two-stage training이 적혀 있다. Stage 1은 Stable로, 최대 200B math corpus를 사용해 model이 더 깊은 mathematical knowledge를 얻도록 train한다. Stage 2는 Decay로, 20B tokens를 사용해 continuous training을 수행하며 capability를 consolidate하고 deepen한다.
 
@@ -139,7 +139,7 @@ Mid-training page에는 two-stage training이 적혀 있다. Stage 1은 Stable�
 
 #### Slide 16: Post-training: SFT + GRPO
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/016.png)
 
 Post-training page는 두 단계로 나뉜다. Step1은 SFT이며, objective는 instruction-following 향상이다. data는 Infinity-Instruct-core이고, 1.4M high-quality instructions가 full 7M dataset의 95.7% performance에 도달할 수 있다고 한다. Step2는 RL이며, algorithm은 GRPO, data는 GSM8K, MATH 같은 mathematical reasoning training set에서 온다.
 
@@ -147,7 +147,7 @@ Post-training page는 두 단계로 나뉜다. Step1은 SFT이며, objective는 
 
 #### Slide 17: OpenSeek-Small results
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/017.png)
 
 Results page는 두 가지를 보여준다. final Decay model은 MATH500 등 math benchmark에서 competitive한 performance를 내며, 일부 더 큰 comparison model을 넘는다. 또한 two-stage training과 incremental innovation approach, 즉 base model이 systematic enhancement를 통해 더 강한 capability를 얻을 수 있음을 검증한다.
 
@@ -155,7 +155,7 @@ Baseline으로서 이 페이지의 핵심은 final model이라고 주장하는 �
 
 #### Slide 18: Training curves
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/018.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/018.png)
 
 Training curves page는 learning curves와 benchmark performance로 나뉜다. learning curves는 training이 stable한지, loss spike나 plateau가 생겼는지 보는 데 쓰인다. benchmark performance는 특정 stage의 checkpoint가 task에서 실제로 향상됐는지 확인하는 데 쓰인다.
 
@@ -163,7 +163,7 @@ large model open source에서 final score만 주고 training curve를 주지 않
 
 #### Slide 19: Attention evolution
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/019.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/019.png)
 
 이 페이지는 attention mechanism evolution section의 divider다. 뒤에서는 traditional attention의 `O(N^2)` complexity에서 DMA로 가고, Trainable Dynamic Mask Sparse Attention과 flash-dmattn code로 이어진다.
 
@@ -171,7 +171,7 @@ long context에서 진짜 어려운 점은 mask가 compute를 아끼면서도 ke
 
 #### Slide 20: Dynamic Mask Attention
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/020.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/020.png)
 
 이 페이지는 문제를 complexity comparison으로 압축한다. traditional attention은 `O(N^2)`이고 sequence length가 두 배가 되면 QK와 softmax matrix가 제곱으로 커진다. DMA의 생각은 각 token에 대해 소수의 중요한 historical token을 dynamic하게 선택하고, compute complexity를 `O(N*w)`로 줄이는 것이다. 여기서 `w`는 보존되는 token 또는 window 수다.
 
@@ -179,7 +179,7 @@ long context에서 진짜 어려운 점은 mask가 compute를 아끼면서도 ke
 
 #### Slide 21: Trainable Dynamic Mask Sparse Attention
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/021.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/021.png)
 
 이 페이지는 paper title page다: Trainable Dynamic Mask Sparse Attention. 핵심은 `Trainable`과 `Dynamic Mask`라는 두 단어다. mask는 더 이상 handwritten rule도 fixed sliding window도 아니며, trainable parameter를 통해 서로 다른 historical position에 score를 주고 top-w position만 attention에 남긴다.
 
@@ -187,7 +187,7 @@ long context에서 진짜 어려운 점은 mask가 compute를 아끼면서도 ke
 
 #### Slide 22: flash-dmattn code and paper
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/022.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/022.png)
 
 flash-dmattn repository는 Triton/CuTe implementation을 제공하며, 이 talk에서 가장 명확한 code landing point다. slide는 GitHub address와 Alphaxiv page를 함께 제시한다. 이 부분이 paper/idea에서 public implementation으로 내려왔다는 뜻이다.
 
@@ -195,7 +195,7 @@ flash-dmattn repository는 Triton/CuTe implementation을 제공하며, 이 talk�
 
 #### Slide 23: DMA vs NSA
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/023.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/023.png)
 
 DMA vs NSA 페이지는 두 종류의 sparse attention을 나란히 둔다. NSA는 preset 또는 structured sparsity에 가깝고, DMA는 dynamic mask를 강조한다. 현재 input과 trainable parameter에 따라 어떤 token이 attention에 들어갈지 결정한다.
 
@@ -203,7 +203,7 @@ slides는 trainable dynamic mask 쪽에 더 무게를 둔다. code에서는 `top
 
 #### Slide 24: top-w / delta mask method
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/024.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/024.png)
 
 이 페이지는 DMA mask formula를 제시한다. original attention은 `softmax(QK^T / sqrt(d_head))V`다. DMA는 먼저 extra bias term `delta = exp(softplus(VΔ)A)`를 정의한다. 여기서 `Δ`는 head dimension 안의 trainable matrix이고, `A`는 head별 trainable coefficient다. 그런 다음 `delta`에서 top-w values를 선택하고 나머지 position을 `-inf`로 만든 뒤, `delta`를 `QK^T`와 같은 size로 expand하여 refined attention, 즉 `softmax((QK^T + delta) / sqrt(d_head))V`를 얻는다.
 
@@ -211,7 +211,7 @@ slides는 trainable dynamic mask 쪽에 더 무게를 둔다. code에서는 `top
 
 #### Slide 25: Experimental setup
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/025.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/025.png)
 
 Experimental setup page는 All Experimental Environments, Pre-training Corpus, Training Framework, Eval Framework for Perplexity Tasks, Eval Framework for Downstream Tasks를 나열한다. 이는 sparse attention result를 unified training/evaluation environment 안에서 봐야 한다는 reminder다.
 
@@ -219,7 +219,7 @@ sparse attention의 benefit은 accuracy와 함께 평가해야 한다. speed만 
 
 #### Slide 26: Scaling: fewer FLOPs
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/026.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/026.png)
 
 이 페이지의 title은 Scaling Law experiment이고, 그림에는 "DMA require fewer FLOPs than the standard MHA and NSA"라고 적혀 있다. x-axis는 FLOPs, y-axis는 perplexity이며, curve는 MHA, SWA, MLA, NSA, DMA를 비교한다. 보라색 DMA curve는 전체적으로 빨간 NSA와 파란 MHA보다 낮다. 비슷한 perplexity에서 더 적은 FLOPs가 필요하다는 뜻이다. 초록 MLA curve는 이 experiment에서는 우위에 있지 않다.
 
@@ -227,7 +227,7 @@ sparse attention의 benefit은 accuracy와 함께 평가해야 한다. speed만 
 
 #### Slide 27: MQAR speed
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/027.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/027.png)
 
 MQAR은 multi-query associative recall이며, long context의 key-value retrieval speed를 재기에 적합하다. figure의 x-axis는 sequence length로 1024부터 8192까지이고, y-axis는 speed(ms)다. 파란 MHA는 long sequence에서 급격히 느려져 8192에서는 거의 1700ms에 가깝다. SWA, NSA, DMA는 모두 MHA보다 훨씬 낮다. bar 위의 percentage는 relative speedup으로 볼 수 있는데, 4096에서 DMA는 약 78.4%, 8192에서 약 87.0%로 표시되어 있다.
 
@@ -235,7 +235,7 @@ page header 가운데의 "dynamic skipping is theoretical efficiency into a real
 
 #### Slide 28: Needle-in-a-haystack
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/028.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/028.png)
 
 Needle-in-a-haystack은 sparse attention에 대한 recall stress test다. key information을 long context의 여러 depth에 묻고 model이 찾아낼 수 있는지 본다. 그림의 heatmap 세 개는 각각 MHA, Native Sparse Attention, Dynamic Mask Attention이다. x-axis는 token limit으로 1K부터 16K까지이고, y-axis는 depth percent로 0%부터 100%까지다. 색이 green에 가까울수록 score가 높다.
 
@@ -243,7 +243,7 @@ Needle-in-a-haystack은 sparse attention에 대한 recall stress test다. key in
 
 #### Slide 29: General benchmark
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/029.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/029.png)
 
 이 페이지의 table은 DMA를 general benchmark에서 비교한다. columns는 Pile/Lambada perplexity, Lambada/MMLU/TriviaQA/ARC/PIQA/HellaSwag/OBQA/WinoGrande accuracy, LongBench average를 포함한다. arrow는 PPL은 낮을수록 좋고 ACC/AVG는 높을수록 좋다는 뜻이다. table은 Zero-Shot과 Five-Shot 두 section으로 나뉘며, row에는 MHA 외에도 H2O, InfLLM, Quest, DAM, Exact-Top, NSA, DMA가 있다.
 
@@ -251,7 +251,7 @@ Zero-Shot에서 DMA의 Pile PPL은 45.12, LongBench Avg는 16.2이고, MMLU, ARC
 
 #### Slide 30: Future plan
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/030.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/030.png)
 
 Future plan page는 마지막 chapter의 divider다. 앞에서 OpenSeek-Small과 DMA를 설명했고, 뒤에서는 OpenSeek-mid 10B plan과 three pillars로 들어간다.
 
@@ -259,7 +259,7 @@ Future plan page는 마지막 chapter의 divider다. 앞에서 OpenSeek-Small과
 
 #### Slide 31: OpenSeek-mid 10B plan
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/031.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/031.png)
 
 OpenSeek-mid page는 다음 stage를 세 column으로 나눈다. Data Efficiency는 3-4TB token이고, data source는 CCI4.0/Decay/Midtraining을 포함한다. Training Efficiency는 약 3B model로 10B를 initialize하는 것이다. Structure Efficiency는 DMA/NSA다.
 
@@ -267,7 +267,7 @@ OpenSeek-mid page는 다음 stage를 세 column으로 나눈다. Data Efficiency
 
 #### Slide 32: Three pillars: data, algorithm, system
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/032.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/032.png)
 
 Three pillars page는 open model evolution을 Data, Algo, System으로 나눈다. Data에는 annealing과 synthesis가 포함되고, Algo에는 RL과 model structure가 포함되며, System에는 new structure support와 efficiency optimization이 포함된다.
 
@@ -275,7 +275,7 @@ OpenSeek의 특징은 system을 post-processing으로 보지 않는다는 점이
 
 #### Slide 33: Community invitation
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/033.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/033.png)
 
 Community invitation page는 직설적이다. open model은 지속적인 contribution에 기대야 한다. engineering contributor에게 flash-dmattn, FlagScale, training config는 모두 participation entry다.
 
@@ -283,7 +283,7 @@ slide는 contributor를 세 종류로 나눈다. scarce data를 가진 domain ex
 
 #### Slide 34: Booth and contact
 
-<img src="img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/034.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-openseek-ai-model-aa63a3ff/034.png)
 
 마지막은 booth와 contact다. 이 페이지에는 새로운 technical increment가 없으므로, 뒤에서는 OpenSeek의 public assets와 DMA code에 다시 초점을 둔다.
 

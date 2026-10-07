@@ -18,7 +18,7 @@ Code mapping을 명확히 해야 한다. Ant 내부 AI Gateway의 complete imple
 
 #### Slide 1: Ant AI Gateway: 대규모 온라인 추론 서비스 클러스터 최적화
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/001.png)
 
 Title page는 발표 범위를 제시한다. Ant AI Gateway가 large-scale online inference service cluster에서 performance를 optimize하는 방법이다. Speaker는 Mooncake core member이자 Envoy Golang Maintainer이기도 하다. 그래서 뒤에서 KVCache Store, PD routing, cloud-native gateway가 함께 등장하는 이유가 설명된다.
 
@@ -26,7 +26,7 @@ Title page는 발표 범위를 제시한다. Ant AI Gateway가 large-scale onlin
 
 #### Slide 2: 목차: Load Feature에서 Gateway Scheduling까지
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/002.png)
 
 목차는 세 부분으로 나뉜다. Large-scale inference cluster의 challenge, Ant AI Gateway practice, future evolution이다. 이 순서가 중요하다. 먼저 왜 round-robin/least-connection이 충분하지 않은지 설명하고, 그 다음 v1/v2가 load와 cache signal을 어떻게 보완했는지 이야기하며, 마지막에 predicted latency, Mooncake Store, PD Router, cloud-native architecture로 들어간다.
 
@@ -34,7 +34,7 @@ Title page는 발표 범위를 제시한다. Ant AI Gateway가 large-scale onlin
 
 #### Slide 3: Inference Cluster에서 AI Gateway의 위치
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/003.png)
 
 이 페이지는 AI Gateway를 inference service intelligent hub로 정의한다. 오른쪽에는 네 가지 target이 있다. intelligent routing, overload protection, multi-tenant QoS, automatic failover다. 위쪽의 두 benefit은 latency 감소와 throughput 향상이다. 즉 gateway는 entry governance를 수행하는 동시에 backend execution state도 이해해야 한다.
 
@@ -42,7 +42,7 @@ AI Gateway는 user/API와 inference backend 사이에 위치한다. Authenticati
 
 #### Slide 4: LLM Request Load는 Nonlinear하다
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/004.png)
 
 이 slide의 title은 "load와 request 수의 nonlinear relation"이다. 왼쪽은 inference computation feature를 나열한다. 계산량이 크고 single-node concurrency가 작으며, request input/output 변화가 크고 load fluctuation이 크며, prefix semantic cache를 재사용할 수 있다. 오른쪽은 classic algorithm이 더 이상 적용되지 않는 이유를 말한다. Round-robin은 request count만 balance하고, least-connection은 concurrency count만 balance한다.
 
@@ -50,7 +50,7 @@ LLM load는 request 수에 linear하게 더할 수 없다. 200-token prompt와 2
 
 #### Slide 5: Prefill과 Decode 두 Stage
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/005.png)
 
 이 페이지는 inference process를 Prefill과 Decode로 나눈다. Prefill의 작은 글자는 compute bound이며 거의 concurrency capability가 없다고 설명한다. Decode는 grouped batch와 small concurrency를 강조한다. 그림의 역할은 routing layer에 같은 request라도 stage마다 resource profile이 완전히 다르다는 것을 상기시키는 것이다.
 
@@ -58,7 +58,7 @@ Prefill은 주로 long-sequence attention computation과 KV write를 소비한�
 
 #### Slide 6: Attention과 FFN의 Resource 차이
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/006.png)
 
 이 slide는 model 내부 resource를 계속 분해한다. Attention의 computation과 memory access는 context length와 양의 상관관계가 있고, FFN computation은 주로 batch size와 관련되며 memory access는 상대적으로 fixed하다. 즉 같은 batch size에서도 long context는 attention 쪽을 더 무겁게 만들고, 같은 context length에서는 large batch가 FFN 쪽을 더 무겁게 만든다.
 
@@ -66,7 +66,7 @@ Prefill은 주로 long-sequence attention computation과 KV write를 소비한�
 
 #### Slide 7: Request Scheduling에서 Token Scheduling까지
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/007.png)
 
 이 slide는 intelligent routing의 본질을 request granularity와 token granularity의 co-optimization으로 쓴다. Request granularity는 주로 latency와 throughput에 영향을 준다. Request가 어느 instance를 선택하는지, queue에서 얼마나 기다리는지, prefill이 cache hit하는지가 포함된다. Token granularity는 batch organization과 hardware utilization에 주로 영향을 준다. Decode stage의 각 step에서 어떤 token을 batch에 넣을지 결정한다.
 
@@ -74,7 +74,7 @@ Request-level scheduling은 "이 prompt를 어떤 machine으로 보낼지"만 �
 
 #### Slide 8: Traditional Load Balancing이 충분하지 않은 이유
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/008.png)
 
 이 slide는 세 가지 key point를 나열한다. Large model computation process, tradeoff, real pressure test cost가 높다는 점이다. Gateway optimization에 classic load balancing experience를 그대로 적용할 수 없는 이유를 설명한다. LLM의 computation process에는 stage difference가 있고, routing 시 cache hit, current load, expected decode length 사이에서 tradeoff해야 한다. Real online pressure test는 cost가 높기 때문에 많은 strategy를 반복 trial-and-error로 조정하기 어렵다.
 
@@ -82,7 +82,7 @@ Traditional LB의 round-robin 또는 least-connection은 LLM에 충분하지 않
 
 #### Slide 9: Ant AI Gateway Practice Chapter Transition
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/009.png)
 
 이 페이지는 practice section transition이다. 앞에서는 LLM request cost가 linear하지 않음을 설명했다. 뒤에서는 Ant AI Gateway가 v1의 simple queue-num에서 v2의 self-loop metrics와 cache-aware, 그리고 v3의 latency prediction으로 어떻게 iterate했는지 이야기한다.
 
@@ -90,7 +90,7 @@ Traditional LB의 round-robin 또는 least-connection은 LLM에 충분하지 않
 
 #### Slide 10: Ant AI Gateway Architecture
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/010.png)
 
 이 페이지는 Ant AI Gateway의 기본 위치를 그린다. Data-center-level entry, inference-instance-level routing, multi-tenant sharing이다. Data-center-level entry는 어떤 model instance 앞의 작은 proxy가 아니라 cluster entry라는 뜻이다. Inference-instance-level routing은 구체적인 backend instance state를 알아야 한다는 뜻이다. Multi-tenant sharing은 서로 다른 tenant의 SLO와 isolation을 처리해야 함을 의미한다.
 
@@ -98,7 +98,7 @@ Ant AI Gateway architecture는 control plane과 data plane을 나눈다. Data pl
 
 #### Slide 11: v1: Polling Metrics와 queue-num score
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/011.png)
 
 v1은 periodic metrics polling을 사용하고, score는 직접 `queue-num`을 사용한다. Selection은 `topK + random`이다. 즉 queue가 짧은 instance group을 먼저 고른 뒤, 그중 하나를 random하게 선택해 모든 request가 동일한 best instance로 몰리는 것을 피한다.
 
@@ -106,7 +106,7 @@ v1은 periodic metrics polling을 사용하고, score는 직접 `queue-num`을 �
 
 #### Slide 12: v1의 문제: Metric Lag와 Cache-unaware
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/012.png)
 
 v1 problem page는 metric collection과 algorithm 양쪽으로 나뉜다. Metric collection 쪽에는 세 가지가 있다. Timeliness가 낮고, multi-engine adaptation cost가 높으며, periodic collection이 engine에 overhead를 준다. Algorithm 쪽도 세 가지다. Load metric이 단일하고, long/short request interference가 크며, cache-aware가 없다.
 
@@ -114,7 +114,7 @@ v1 problem page는 metric collection과 algorithm 양쪽으로 나뉜다. Metric
 
 #### Slide 13: v2: self-loop metrics
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/013.png)
 
 v2는 먼저 metric collection을 바꾸고 self-loop statistics를 도입한다. Slide에는 두 가지 core metric이 적혀 있다. unfinished request count와 prefill length다. Unfinished request count는 polling queue보다 data plane current state에 더 가깝다. Prefill length는 long prompt load를 routing에 explicit하게 포함한다.
 
@@ -122,7 +122,7 @@ Benefit도 slide에 적혀 있다. Timeliness와 prefill load다. Pure control-p
 
 #### Slide 14: cache-aware prefix tree
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/014.png)
 
 Cache-aware prefix tree는 이 발표에서 LLM inference semantics에 가장 가까운 slide다. 그림 왼쪽은 Metadata-center이며, 그 안에 approximate Radix-Tree를 유지한다. AI Gateway는 `1. LB 선택 전` Metadata-center에 `cache query`를 보내 후보 instance의 prefix hit 상태를 얻는다. Request가 engine에서 `3. first token response`까지 처리되면, gateway/engine은 새로 생성된 cache 정보를 Metadata-center에 `save cache`하여 다음 비슷한 prompt에 사용하게 한다.
 
@@ -130,7 +130,7 @@ Cache-aware prefix tree는 이 발표에서 LLM inference semantics에 가장 �
 
 #### Slide 15: score = cache_ratio - request_load - prefill_load
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/015.png)
 
 이 slide는 v2의 multi-factor scoring을 제시한다. `score = W1*cache_ratio - W2*request_load - W3*prefill_load`. `cache_ratio`는 prefix cache hit rate이며, 높을수록 선택해야 한다. `request_load`는 request queue count이며, 높을수록 queuing pressure가 크다는 뜻이다. `prefill_load`는 현재 prefill stage에 있는 prompt length이며, 높을수록 instance가 long-context prefill을 처리 중이라는 뜻이다.
 
@@ -138,7 +138,7 @@ Cache-aware prefix tree는 이 발표에서 LLM inference semantics에 가장 �
 
 #### Slide 16: v2 Optimization Effect
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/016.png)
 
 v2 result page는 세 가지 benefit을 제시한다. KVCache hit rate가 두 배 향상되었고, TTFT average가 50% 감소했으며, TTFT long-tail이 order-of-magnitude로 줄었다. 여기서 TTFT benefit은 두 방향에서 온다. Prefix cache hit 후 prefill을 덜 수행하고, long prompt가 cold node로 자주 route되지 않는다.
 
@@ -146,7 +146,7 @@ Long-tail order-of-magnitude reduction은 특히 중요하다. Average reduction
 
 #### Slide 17: Online Scenario의 Stability Constraint
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/017.png)
 
 이 페이지는 future evolution transition이다. 앞서 v2가 self-loop metrics와 approximate prefix tree를 활용했지만, 여전히 heuristic scoring이다. Future evolution은 더 정확한 latency prediction, 더 정확한 cache-aware, 더 복잡한 PD/EP/DP hierarchical routing을 해결해야 한다.
 
@@ -154,7 +154,7 @@ Online system은 average latency만 볼 수 없고 jitter, failure recovery, mul
 
 #### Slide 18: v2가 아직 해결하지 못한 부분
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/018.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/018.png)
 
 v2 problem page도 metric과 algorithm 양쪽으로 나뉜다. Metric 쪽은 decode context length가 부족하고, cache-aware도 아직 approximate라 accuracy가 약 80%다. Algorithm 쪽의 문제는 weight parameter tuning이 어렵고, explainability가 낮으며, priority scheduling을 구현할 수 없다는 점이다. 아래 formula는 decode_load도 추가한다. `W1*cache_ratio - W2*request_load - W3*prefill_load - W4*decode_load`.
 
@@ -162,7 +162,7 @@ v2 problem page도 metric과 algorithm 양쪽으로 나뉜다. Metric 쪽은 dec
 
 #### Slide 19: Latency prediction
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/019.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/019.png)
 
 v3 slide는 heuristic scoring을 prediction modeling으로 바꾼다. 위쪽은 먼저 metric collection을 수행한다. Prefill stage에서는 `input-length & cache-ratio`를 수집하고, decode stage에서는 `batch-size & context-length`를 수집한다. 중간 predictor는 세 가지를 modeling한다. TTFT, TPOT, Output Length다. 아래 algorithm은 predicted latency 기반으로 선택하며, multi-tenant SLO filtering도 지원한다.
 
@@ -170,7 +170,7 @@ v3 slide는 heuristic scoring을 prediction modeling으로 바꾼다. 위쪽은 
 
 #### Slide 20: Mooncake Store와 KVCache Sharing
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/020.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/020.png)
 
 Mooncake Store slide는 더 정확한 cache-aware를 다룬다. Flow는 `1. inference request`가 AI Gateway에 들어오는 것으로 시작한다. Gateway는 request content에 따라 `2. KVCache key 생성`을 하고, Mooncake에 `3. KVCache query`를 보낸다. Store에서 해당 KV를 찾을 수 있으면 engine은 `4. inference request` 시 KV를 가져와 reuse할 수 있다. 오른쪽 두 benefit은 각각 KVCache local hit rate 향상과 KVCache transfer bandwidth/time 감소다.
 
@@ -178,7 +178,7 @@ Mooncake Store slide는 더 정확한 cache-aware를 다룬다. Flow는 `1. infe
 
 #### Slide 21: TTFT와 TPOT Modeling
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/021.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/021.png)
 
 이 slide의 title은 "latency prediction model"이다. 왼쪽은 두 modeling assumption을 직접 제시한다. TTFT는 quadratic relation, TPOT는 stage-wise linear다. 왼쪽 아래 graph의 x-axis는 input token length, y-axis는 Time to First Token이다. Blue point는 single measurement, red point는 mean과 standard deviation, green fitted curve는 명확히 위로 휜다. Prompt가 길어지면 prefill cost가 linear하게 증가하지 않는다는 뜻이다. Attention computation, cache hit rate, batching, queuing이 함께 영향을 주므로 quadratic term approximation이 더 안정적이다.
 
@@ -186,7 +186,7 @@ Mooncake Store slide는 더 정확한 cache-aware를 다룬다. Flow는 `1. infe
 
 #### Slide 22: PD Router와 DP imbalance
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/022.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/022.png)
 
 이 slide는 disaggregated inference 후 routing layer의 형태를 말한다. 왼쪽 그림은 세 layer 구조다. 맨 위 `Global Router`가 global entry decision을 먼저 하고, 중간 `PD Router`가 prefill/decode allocation을 결정하며, 아래 `DP LB`가 data parallel granularity에서 load balancing을 수행한다. 오른쪽 첫 문구는 "PD separation이 PD Router를 낳았다"는 뜻이다. Prefill과 decode를 분리하면 request는 더 이상 한 instance만 고르면 되는 것이 아니라, prefill을 어디에 둘지, decode를 어디에 둘지, KV를 어떻게 transfer할지 결정해야 한다.
 
@@ -194,7 +194,7 @@ Mooncake Store slide는 더 정확한 cache-aware를 다룬다. Flow는 `1. infe
 
 #### Slide 23: Cloud-native Go Extension
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/023.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/023.png)
 
 이 slide는 AI Gateway를 cloud-native architecture로 내린다. 왼쪽 위 control plane은 `k8s Gateway API`와 `Service/Inference Pool`을 받는다. Model entry, service pool, routing rule을 Kubernetes resource로 표현하려는 것이다. 왼쪽 아래 data plane은 same-process instance이고, base는 `envoy + Golang`이다. 중간 plugin mechanism은 metric collection, balancing algorithm, authentication/authorization, rate limiting, prediction model, Trace, overload protection, multi-tenant SLO, observability라는 9가지 capability를 나열한다.
 
@@ -202,7 +202,7 @@ Mooncake Store slide는 더 정확한 cache-aware를 다룬다. Flow는 `1. infe
 
 #### Slide 24: Summary
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/024.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-ai-gateway-inference-optimization-872fbcff/024.png)
 
 마지막 slide는 한 문장으로 요약할 수 있다. Large-model gateway는 request shape, cache location, backend execution state를 이해해야 한다. 그렇지 않으면 단지 HTTP forwarder일 뿐이고, inference cluster가 computation을 절약하도록 도울 수 없다.
 

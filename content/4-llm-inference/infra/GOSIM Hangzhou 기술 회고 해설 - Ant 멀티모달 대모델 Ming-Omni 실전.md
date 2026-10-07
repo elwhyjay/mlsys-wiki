@@ -19,7 +19,7 @@
 
 #### Slide 1: Ant 멀티모달 대모델 실전
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/001.png)
 
 제목 페이지는 주제를 제시한다. Ant 멀티모달 대모델 실전이다. 본문의 주선은 Ming-Omni다. 이것은 단순한 VLM이 아니라 이미지, 비디오, 오디오, 텍스트 이해와 생성을 더 통합된 모델 체계 안에 넣는 시도다.
 
@@ -27,7 +27,7 @@
 
 #### Slide 2: 목차: 모델 패밀리, Ming-Omni, 기술 세부
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/002.png)
 
 목차는 네 부분이다. Bailing 대모델 기술 배치, 멀티모달 기술 추세와 Ant 멀티모달의 진화, Ming-Omni 핵심 기술, Bailing 대모델의 진화다. 앞의 두 부분은 왜 통합 멀티모달을 해야 하는지 설명하고, 세 번째 부분에서야 모델 구조, 학습, 생성으로 들어간다.
 
@@ -35,7 +35,7 @@
 
 #### Slide 3: Ling/Ring/Ming 모델 배치
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/003.png)
 
 이 페이지는 Bailing 대모델 기술 배치이며 정보량이 많다. 상층은 의료 매니저, 금융 매니저, 생활 매니저, CodeFuse, 지능형 고객지원, 보험 도우미, 의사 도우미 같은 애플리케이션이다. 중간은 언어, 코드, 산업, 멀티모달 모델이고, 기반은 컴퓨팅, 안전, 지식 역량이다.
 
@@ -43,7 +43,7 @@ Ling/Ring/Ming은 모델 패밀리의 역할 분담이다. Ling은 언어 기반
 
 #### Slide 4: 모델 패밀리의 능력 경계
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/004.png)
 
 이 페이지는 네 가지 노선을 명확히 나열한다. Ling-lite/Ling-mini는 "작은 몸집, 큰 지능"의 고성비 언어 노선이고, Ring-lite/Ring-mini는 Joint RL로 어려운 사례를 깊게 파고 추론 수준을 높인다. Ring-lite-linear는 혼합 선형 어텐션으로 긴 텍스트의 중복을 낮춘다. Ming-lite-omni는 청각, 시각 등 여러 능력을 융합한다.
 
@@ -51,7 +51,7 @@ Ling/Ring/Ming은 모델 패밀리의 역할 분담이다. Ling은 언어 기반
 
 #### Slide 5: 장 전환: Ming-Omni
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/005.png)
 
 이 페이지는 목차 전환이며, 화제를 모델 패밀리 배치에서 멀티모달 기술 추세로 옮긴다. 뒤에서 답할 두 질문을 암시한다. 업계가 왜 "멀티모달 이해"에서 "이해와 생성의 통합"으로 가는가, 그리고 Ant는 왜 Ming-Omni 노선을 택했는가.
 
@@ -59,7 +59,7 @@ Ling/Ring/Ming은 모델 패밀리의 역할 분담이다. Ling은 언어 기반
 
 #### Slide 6: 멀티모달이 전체 모달리티 통합으로 향한다
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/006.png)
 
 추세 페이지는 가로축을 "이해 -> 생성 -> 이해 생성 통합"으로, 세로축을 "단일 모달리티 -> 멀티모달"로 그린다. 왼쪽은 이미지-텍스트 이해, 음성 이해 같은 단방향 이해 모델이고, 가운데는 이미지/비디오/음성/3D 생성 모델이다. 오른쪽은 Gemini 2.5, GPT-4o, Qwen-Omni, Janus, Bagel, Ming-lite-omni 같은 이해와 생성 통합 방향이다.
 
@@ -67,7 +67,7 @@ Ling/Ring/Ming은 모델 패밀리의 역할 분담이다. Ling은 언어 기반
 
 #### Slide 7: Ming scaling 궤적
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/007.png)
 
 Ming scaling 궤적은 여러 모델을 하나의 좌표도에 놓는다. Qwen2.5-VL, Qwen-Omni, Ming-lite-uni, Ming-lite-omni-preview에서 Ming-flash-omni, Ming-Omni, Ming-world++로 이어진다. 오른쪽 Ming-Omni의 bullet에는 GPT-4o에 맞춘 전체 모달리티 모델, 통합 tokenizer와 학습 목표, MoE 구조와 학습 전략 최적화를 통한 모달리티 통합이 적혀 있다.
 
@@ -75,7 +75,7 @@ Ming scaling 궤적은 여러 모델을 하나의 좌표도에 놓는다. Qwen2.
 
 #### Slide 8: 장 전환: 기술 방안
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/008.png)
 
 이 페이지는 Ming-Omni 핵심 기술로 들어가는 목차 전환이다. 뒤의 세 장 핵심 slide는 각각 모델 능력과 특성, 전체 모달리티 구조, 혼합 학습, 시각 이해와 생성 통합을 다룬다.
 
@@ -83,7 +83,7 @@ Ming scaling 궤적은 여러 모델을 하나의 좌표도에 놓는다. Qwen2.
 
 #### Slide 9: Ming-Omni: 보고, 듣고, 말하고, 그린다
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/009.jpg" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/009.jpg)
 
 Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째는 간결한 모델 구조다. Ling-lite 기반 MoE 구조 위에서 구조 설계와 다단계 학습을 통해 이해와 생성을 통합한다. Ming-lite-omni v1.5는 음성, 시각, 이미지, 텍스트 전체 모달리티 이해와 생성을 지원한다. 두 번째는 크로스 모달 융합과 통합이다. 학습 단계와 데이터 모달리티 두 축으로 학습 데이터 비율을 조절하고, 목표 함수 동적 가중 알고리즘을 도입한다. 세 번째는 이해와 생성의 통합이다. 생성식 검출/분할로 지각을 강화하고, 다중 스케일 학습 가능 token과 표현 정렬로 이미지 이해와 생성을 통합하며, 멀티모달 대화와 TTS도 지원한다.
 
@@ -91,7 +91,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 10: 능력 전시
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/010.png)
 
 능력 전시 페이지에는 음성/비디오 상호작용, 멀티모달 추론, 이미지 분할, 생성식 편집, 인물 편집, ID 일관성 유지가 들어 있다. 이 페이지의 역할은 Ming-Omni가 단일 VQA가 아니라 지각, 추론, 편집, 생성의 조합 작업을 포괄한다는 점을 보여주는 것이다.
 
@@ -99,7 +99,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 11: Ming-Omni 구조
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/011.png)
 
 이 페이지의 왼쪽 범례는 먼저 token 타입을 제시한다. 파란 박스는 text token, 노란 박스는 vision token, 초록 박스는 audio token, 회색 박스는 pad token이다. 연한 색 블록은 shared experts, 파란 블록은 routing experts를 뜻한다. 불꽃은 perception training, 물방울은 generation training이다. 하단의 image/video는 먼저 Vision Encoder로 들어가고, audio는 Audio Encoder로 들어간다. 연속 특징은 token 시퀀스에 다시 삽입된 뒤 Ling 기반 모델로 들어간다. 가운데 Ling은 Attention Layer와 MoE FFN을 쌓은 구조다. 오른쪽 아래에는 T/V/A Router도 그려져 있어 텍스트, 시각, 오디오 token이 서로 다른 모달리티 라우팅을 거쳐 shared/routing experts와 조합될 수 있음을 보여준다.
 
@@ -107,7 +107,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 12: 혼합 전체 모달리티 학습
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/012.png)
 
 이 페이지의 왼쪽 위는 사전학습 gradient accumulation 전략을 설명한다. 각 step에서 각 모달리티의 batch를 하나씩 샘플링해 각각 loss를 계산하고, 다시 gradient weighted update를 수행한다. 오른쪽 위 점선 박스는 학습 데이터 형태를 나열한다. 이미지-텍스트 쌍, 오디오-텍스트 쌍, OCR, 순수 텍스트, 교차 이미지-텍스트 시퀀스, 비디오-텍스트 쌍이 모두 `BailingMM-Native`로 들어가고, forward 결과 `loss1`부터 `loss6`까지 얻은 뒤 backward에서 파라미터 업데이트로 합쳐진다.
 
@@ -115,7 +115,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 13: 시각 이해와 생성 통합
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/013.png)
 
 이 페이지 왼쪽은 학습과 추론을 함께 그린다. 학습 때 image tokens, text tokens, multi-scale queries가 Multi-modal LLM으로 들어간다. response 쪽의 multi-scale query는 Connector를 거쳐 DiT Blocks에 연결되고, 각각 128px, 256px, 512px denoising objective를 담당한다. 동시에 representation alignment도 있어 서로 다른 스케일의 표현을 정렬한다. 추론 때는 noisy inputs가 여러 층의 DiT Block에 들어가 최종 512px 이미지를 만든다.
 
@@ -123,7 +123,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 14: 장 전환: 오픈소스와 진화
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/014.png)
 
 이 페이지는 "Bailing 대모델 진화"로 들어가는 목차 전환이다. 앞에서는 이미 Ming-Omni의 구조와 학습을 설명했고, 뒤에서는 버전 진화와 오픈소스 자료로 돌아간다.
 
@@ -131,7 +131,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 15: 버전 진화
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/015.png)
 
 버전 진화 페이지는 "효율과 지능의 진화 경로"를 다섯 지점으로 나눈다. 스캔 수준 AI, MoE, 선형 Attention, 멀티모달 융합, AI 최적화다. 이 페이지가 표현하려는 것은 모델 진화가 파라미터를 키우는 것만으로 이루어지지 않고, 비용 대비 성능, 구조, 긴 텍스트 효율, 모달리티 이해, 평가 기준도 포함한다는 점이다.
 
@@ -139,7 +139,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 16: 논문, 모델, 코드 링크
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/016.png)
 
 링크 페이지는 Ming-lite-omni 1.5와 Ming-lite-uni의 공개 진입점을 제공한다. HuggingFace, ModelScope, GitHub, technical report, project page가 포함된다. 또한 사용자가 논문만 읽는 것이 아니라 바로 weight를 다운로드하고, cookbook을 보고, demo를 실행할 수 있음을 보여준다.
 
@@ -147,7 +147,7 @@ Ming-Omni의 능력 페이지는 세 그룹의 특성을 적는다. 첫 번째�
 
 #### Slide 17: 정리
 
-<img src="img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-ant-model-ming-omni-f677d704/017.png)
 
 정리 페이지는 실전으로 돌아온다. Ming-Omni의 핵심은 모달리티를 쌓아 올리는 데 있지 않고, 연속 특징, 이산 token, 생성 condition, 다중 목표 학습을 유지보수 가능한 모델 구현 안에 넣는 데 있다.
 

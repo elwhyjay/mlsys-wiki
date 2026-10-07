@@ -14,7 +14,7 @@
 
 필요하신 분들은 **star를 눌러주세요**.
 
-[![이미지](./深度学习编译器之Layerout Transform优化 - 知乎_files/v2-f0ed856bc8489c9380aca253034991f5_180x120.jpg)how-to-optim-algorithm-in-cuda/large-language-model-note at master · BBuf/how-to-optim-algorithm-in-cudagithub.com/BBuf/how-to-optim-algorithm-in-cuda/tree/master/large-language-model-note](<https://link.zhihu.com/?target=https%3A//github.com/BBuf/how-to-optim-algorithm-in-cuda/tree/master/large-language-model-note>)
+[how-to-optim-algorithm-in-cuda/large-language-model-note](https://github.com/BBuf/how-to-optim-algorithm-in-cuda/tree/master/large-language-model-note)
 
 이 디렉터리에는 LLM 학습 및 추론과 관련된 일련의 글이 모여 있습니다.
 

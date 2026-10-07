@@ -20,7 +20,7 @@ Code locations:
 
 #### Slide 1: Industrializing Continuous Learning
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/001.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/001.png)
 
 Title page에는 주제만 있다. Industrializing Continuous Learning. 여기서 continuous learning은 online learning algorithm 자체가 아니라, industrial environment에서 continuous retraining, evaluation, serving validation, artifact record, adapter release까지 닫힌 loop를 만드는 것이다.
 
@@ -28,19 +28,19 @@ Title page에는 주제만 있다. Industrializing Continuous Learning. 여기�
 
 #### Slide 2: 목차: retraining framework
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/002.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/002.png)
 
 이 페이지는 contents page이며 retraining framework를 첫 부분에 둔다. 이는 뒤에서 단일 training script가 아니라 continuous learning pipeline을 이야기한다는 점을 암시한다. Data, training, evaluation, serving validation, artifact tracking을 모두 process에 포함해야 한다.
 
 #### Slide 3: 목차: retrain-pipelines와 function calling
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/003.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/003.png)
 
 이 페이지도 contents page이며 Tool-Calling Task와 Training/Evaluating을 연결한다. 이 case는 좋다. Data construction, LoRA/adapter training, function calling evaluation, serving validation을 동시에 포함하기 때문이다. Continuous learning에 engineering loop가 필요한 이유를 잘 보여준다.
 
 #### Slide 4: pip-installable sandbox/production environment
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/004.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/004.png)
 
 pip-installable environment page는 low barrier와 portability를 강조한다. Slide에는 pre-built, highly adaptable pipeline examples가 있어 out of the box로 사용할 수 있다고 쓰여 있다. 아래에는 retrain-pipelines execution의 핵심 feature가 나열된다. Model version blessing, infrastructure validation, comprehensive documentation, 즉 pipeline-card다.
 
@@ -48,7 +48,7 @@ Continuous learning이 소수 expert의 machine에서만 실행될 수 있다면
 
 #### Slide 5: Notebook, CLI, Python launch
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/005.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/005.png)
 
 Launch method는 notebook cell magic, CLI utility, Python method를 포함한다. Slide 오른쪽 세 줄은 같은 pipeline이 특정 entry에 묶이지 않고 exploration environment, command line, production script에서 시작할 수 있음을 강조한다.
 
@@ -56,7 +56,7 @@ Team 관점에서 이런 entry design은 자연스럽다. Researcher는 notebook
 
 #### Slide 6: Internal DAG Engine
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/006.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/006.png)
 
 Internal DAG engine은 retrain-pipelines의 core다. 왼쪽 code에서 `task`, `taskgroup`, `parallel_task`, `dag` decorator를 볼 수 있다. 아래의 `start >> parallel >> snake_heads_A >> join_snake_heads >> merge >> end` line은 Python으로 DAG를 표현하는 것이다. 오른쪽 작은 글자는 두 가지를 강조한다. Pipeline declaration은 simple해야 하고, 동시에 taskgroups와 sub-DAGs를 compose할 수 있어야 한다.
 
@@ -64,7 +64,7 @@ Internal DAG engine은 retrain-pipelines의 core다. 왼쪽 code에서 `task`, `
 
 #### Slide 7: TaskGroup, sub-DAG, parallel branches
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/007.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/007.png)
 
 이 페이지는 `@parallel_task`와 `@taskgroup`을 확대한다. `parallel(payload: TaskPayload)`는 parallel task entry를 나타낸다. `snake_heads_A()` taskgroup은 `snake_head_A1, snake_head_A2`를 반환하며, comment에는 독립적으로 parallel하게 실행할 수 있는 task group이고 같은 input을 받으며 downstream task는 모두 끝난 뒤 시작한다고 명확히 쓰여 있다.
 
@@ -72,7 +72,7 @@ Model iteration에 대응하면 taskgroup은 두 LoRA config를 동시에 train�
 
 #### Slide 8: Aggregator and merge function
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/008.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/008.png)
 
 Aggregator와 merge function은 parallel branch result를 converge하는 데 사용된다. 그림의 `matrix_sum_cols`는 aggregation function으로, input은 2D matrix이고 return은 각 column sum list다. 아래의 `@task(merge_func=matrix_sum_cols)`는 `merge` node가 여러 parallel upstream task result를 받고, 먼저 merge function으로 aggregate한 뒤 custom processing을 계속한다는 뜻이다.
 
@@ -80,7 +80,7 @@ Aggregator와 merge function은 parallel branch result를 converge하는 데 사
 
 #### Slide 9: WebConsole
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/009.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/009.png)
 
 WebConsole page는 runtime visualization entry를 보여준다. 앞에서는 DAG declaration을 설명했고, 이 페이지는 runtime observation을 보완한다. Task list, DAG graph, logs, status, possible Gantt timeline을 한곳에서 볼 수 있다.
 
@@ -88,7 +88,7 @@ Continuous learning에는 observability가 매우 필요하다. 그렇지 않으
 
 #### Slide 10: Team Collaboration
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/010.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/010.png)
 
 Team collaboration page는 share tasks를 강조한다. Model iteration은 single-machine script에 머물 수 없다. 특히 production release가 관련될 때 data, training, evaluation, serving engineer가 같은 pipeline state를 볼 수 있어야 한다.
 
@@ -96,7 +96,7 @@ Team collaboration page는 share tasks를 강조한다. Model iteration은 singl
 
 #### Slide 11: Pipeline card
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/011.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/011.png)
 
 Pipeline card는 이 system의 core artifact 중 하나다. Slide는 portable html files이며, serving endpoint와 함께 현재 service version의 standalone document로 사용할 수 있다고 말한다. 오른쪽은 네 section을 나열한다. EDA, training, key artifacts, pipeline DAG다.
 
@@ -104,7 +104,7 @@ Pipeline card는 이 system의 core artifact 중 하나다. Slide는 portable ht
 
 #### Slide 12: HuggingFace Hub integration
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/012.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/012.png)
 
 HuggingFace Hub integration page는 retrain-pipelines/function_caller_lora adapter의 README를 보여준다. 이 integration은 adapter, README, evaluation graph, model card, version number를 함께 Hub에 publish할 수 있게 한다.
 
@@ -112,7 +112,7 @@ Function-calling adapter의 경우 base model, adapter, tokenizer/template 모�
 
 #### Slide 13: Inspector: 빠른 run artifact 확인
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/013.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/013.png)
 
 Inspector page는 retrain-pipelines가 arbitrary execution을 investigate할 수 있는 programmatic means를 제공한다고 말한다. Slide의 예는 어떤 parallel training이 "went off-road"했을 때 inspector로 detail을 확인할 수 있다는 것이다. Hub integration에도 model versions inspector가 있다.
 
@@ -120,7 +120,7 @@ Inspector page는 retrain-pipelines가 arbitrary execution을 investigate할 수
 
 #### Slide 14: Inspector: source와 artifact tracing
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/014.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/014.png)
 
 Inspector second part는 tracing capability를 계속 보여준다. 여기서 봐야 할 것은 UI style이 아니라 source, artifact, model version, execution record가 연결되어 있다는 점이다.
 
@@ -128,7 +128,7 @@ Continuous learning에서 어떤 model이 좋아지거나 나빠졌다면 당시
 
 #### Slide 15: Inspector: model and data assets
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/015.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/015.png)
 
 이 slide도 inspector에 속하며, focus는 model과 data asset의 location이다. Retraining run이 끝난 뒤 user는 checkpoint, adapter, metrics, pipeline-card, log, intermediate data가 어디 있는지 알아야 한다.
 
@@ -136,13 +136,13 @@ Continuous learning에서 어떤 model이 좋아지거나 나빠졌다면 당시
 
 #### Slide 16: 목차: Tool-Calling으로 이동
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/016.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/016.png)
 
 이 페이지는 section transition이다. Retraining framework에서 Tool-Calling으로 이동한다. 앞부분은 pipeline organization을 이야기했고, 다음은 specific task다. Small adapter가 tool calling protocol을 안정적으로 학습하게 하는 것이다.
 
 #### Slide 17: Function calling 현재 상태
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/017.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/017.png)
 
 Function calling current state page는 flow를 두 단계로 그린다. 첫 단계는 user query와 accessible tools definitions가 LLM + constrained generation을 거쳐 actionable tool-call command, 예를 들어 `is_perfect_square(num=48)`를 만들고 code interpreter에 전달되는 것이다. 두 번째 단계는 tool-call responses를 context로 LLM에 다시 전달해 final natural language answer를 형성하는 것이다.
 
@@ -150,7 +150,7 @@ Tool-calling model은 네 가지를 배워야 한다. 언제 call할지, 어떤 
 
 #### Slide 18: Tool calling과 constrained generation
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/018.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/018.png)
 
 이 slide는 tool calling과 constrained generation을 계속 설명한다. 왼쪽 user question은 "is 48 a perfect square?"이고, accessible tool에는 `is_perfect_square`와 `is_prime`이 있다. 각 tool에는 name, description, parameters가 있다. Model이 output해야 하는 것은 tool call command이지 설명문이 아니다.
 
@@ -158,7 +158,7 @@ Function call은 일반 natural language가 아니다. JSON schema, parameter ty
 
 #### Slide 19: Code interpreter와 tool response
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/019.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/019.png)
 
 Code interpreter와 tool response page는 task를 complete loop로 확장한다. Tool이 `False`를 반환하면, LLM은 user query와 tool-call context를 결합해 최종적으로 "no, 48 is not a perfect square"라고 답해야 한다. Slide 아래는 이를 function-calling task와 question-answering task로 나눈다.
 
@@ -166,7 +166,7 @@ Code interpreter와 tool response page는 task를 complete loop로 확장한다.
 
 #### Slide 20: Completion API와 Responses API
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/020.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/020.png)
 
 Completion API와 Responses API page는 Chip Huyen의 agents article을 인용한다. Slide 왼쪽은 Completion API, 오른쪽은 Responses API structure다. 오른쪽 small text는 responses API의 return structure가 다르고, tool calls의 identifier와 access method도 다르다고 강조한다.
 
@@ -174,7 +174,7 @@ API shape change는 training data format에 영향을 준다. Adapter가 old tem
 
 #### Slide 21: API shape 변화
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/021.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/021.png)
 
 이 페이지는 Responses API의 structure change를 확대한다. Function call은 일반 completion이 아니라, return 안에 tool call id, tool name, arguments, subsequent tool response 같은 structured field가 포함된다는 점을 상기시킨다.
 
@@ -182,7 +182,7 @@ Training pipeline은 prompt template, tool schema, response parser를 artifact�
 
 #### Slide 22: Berkeley Function-Calling leaderboard
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/022.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/022.png)
 
 Berkeley Function-Calling leaderboard는 evaluation reference를 제공한다. Table은 Single Turn, Multi Turn, Agentic의 세 capability를 나열하고, 그 안에서 Non-live(AST), Live(AST), Web Search, Memory 등의 sub-item으로 나뉜다. GLM-4.5(FC), Claude, GLM-4.5-Air, Grok, GPT-5, Kimi K2가 한 table에서 비교된다.
 
@@ -190,13 +190,13 @@ Function calling evaluation은 단순 string matching이 아니다. JSON을 pars
 
 #### Slide 23: 목차: Training & evaluating으로 이동
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/023.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/023.png)
 
 이 페이지도 section transition이며 Training & evaluating으로 들어간다. 앞에서는 function calling의 task shape를 설명했다. 이제 data를 어떻게 construct하고, LoRA adapter를 어떻게 train하며, 실제로 tool calling을 할 수 있는지 어떻게 evaluate하는지 답한다.
 
 #### Slide 24: Function-calling LoRA adapter
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/024.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/024.png)
 
 Function-calling LoRA adapter page는 solution을 제시한다. Base LLM에 switchable knowledge-enhanced task-expert adapter를 더한다. 여기서 adapter는 knowledge base 보강이 아니라, 특정 task에서 model이 tool calling protocol을 안정적으로 출력하게 만드는 것이다.
 
@@ -204,7 +204,7 @@ Function-calling LoRA adapter page는 solution을 제시한다. Base LLM에 swit
 
 #### Slide 25: Dataset과 no-tool-call sample
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/025.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/025.png)
 
 Dataset page는 retrain-pipelines/func_calls_ds를 보여주며 legitimate absence of tool calls를 특별히 강조한다. 이 setting은 function calling에 큰 영향을 준다. 모든 query가 tool을 call해야 하는 것은 아니며, training set에는 "call하지 않는" positive example이 반드시 있어야 한다.
 
@@ -212,7 +212,7 @@ Data가 전부 tool-calling sample이면 model은 "question만 보면 tool을 ca
 
 #### Slide 26: Data augmentation and enrichment
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/026.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/026.png)
 
 Data augmentation과 enrichment page의 target은 wrong call을 줄이는 것이다. Function calling error는 흔히 세 곳에서 발생한다. 존재하지 않는 tool을 hallucinate하거나, 기존 tool에 잘못된 parameter를 채우거나, tool이 필요 없을 때 억지로 call하는 것이다.
 
@@ -220,7 +220,7 @@ Data augmentation은 더 많은 parameter combination 생성, query rewrite, no-
 
 #### Slide 27: PEFT/Unsloth CPT + SFT
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/027.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/027.png)
 
 PEFT/Unsloth Trainer page는 pipeline의 CPT와 SFT task에 대응한다. Slide small text는 CPT adapter를 base에 merge할 수도 있고, CPT adapter 위에서 계속 SFT를 train할 수도 있다고 말한다. 두 방식 모두 100% on/off pluggable을 유지한다.
 
@@ -228,7 +228,7 @@ CPT는 먼저 tool format과 domain data에 적응하고, SFT는 specific functi
 
 #### Slide 28: Evaluation result: 75.5%
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/028.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/028.png)
 
 Evaluation page는 trained on-demand tool-call expert adapter의 result를 제시한다. 4200+ tools의 intrinsic knowledge-bank에서 75.5% accuracy에 도달했으며, "tool call이 필요 없는" sample에서는 거의 full score다. Slide는 usual extended-context arsenal에 의존하지 않았다는 점도 강조한다. 즉 큰 tool document를 context에 밀어 넣은 것이 아니다.
 
@@ -236,7 +236,7 @@ Evaluation page는 trained on-demand tool-call expert adapter의 result를 제�
 
 #### Slide 29: False negatives type 1
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/029.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/029.png)
 
 False negatives page title은 "Tool-call & eval, relationship status: it's complicated"라고 쓰여 있다. 이는 앞 페이지의 75.5%가 absolute real capability가 아니며, evaluation script에 false negatives가 많이 있을 수 있음을 상기시킨다.
 
@@ -244,7 +244,7 @@ False negatives page title은 "Tool-call & eval, relationship status: it's compl
 
 #### Slide 30: False negatives type 2
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/030.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/030.png)
 
 False negatives second type은 evaluation boundary를 계속 설명한다. Screenshot은 `etc.`로 끝난다. Function-calling evaluation의 misclassification source가 많다는 뜻이다. Tool alias, default parameter, omitted parameter, equivalent unit, parser tolerance가 모두 result에 영향을 준다.
 
@@ -252,13 +252,13 @@ Industrial pipeline에서는 failed sample feedback이 single score보다 더 �
 
 #### Slide 31: 목차: Serving으로 이동
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/031.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/031.png)
 
 이 페이지는 Serving section transition이다. Adapter를 train하는 것은 loop의 절반일 뿐이다. Production으로 들어가려면 base model과 함께 online serving할 수 있어야 하고, request가 task별 adapter를 지정할 수 있어야 한다.
 
 #### Slide 32: Multi-adapter single endpoint
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/032.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/032.png)
 
 Multi-adapter single endpoint page는 먼저 serving shape를 설명한다. `transformers`가 load한 base LLM은 PEFT-compatible adapter를 붙일 수 있고, adapter는 on demand로 enable/disable/switch할 수 있다. 이렇게 base model 하나가 VRAM에 resident하고, 여러 LoRA adapter가 "expert"로 request에 따라 선택된다. Adapter마다 독립 service를 띄울 필요가 없다.
 
@@ -266,7 +266,7 @@ Multi-adapter single endpoint page는 먼저 serving shape를 설명한다. `tra
 
 #### Slide 33: 각 adapter의 prompt template
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/033.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/033.png)
 
 이 페이지는 `retraining_pipeline.py`의 `supervised_finetuning` screenshot이다. Code는 `self.sft_prompt_template = dedent("""...""")`를 구성한다. Template 첫 문장은 model에게 "known tools에 대한 knowledge를 기반으로 tool call list를 return하라"고 명확히 요구한다. 아래 rules는 task boundary를 직접 정의한다. Known tool만 사용할 수 있고, 새로운 tool을 만들 수 없다. Query가 known tool과 match하지 않으면 empty list `[]`를 반환한다. Information이 부족하면 억지로 call하지 않는다. Output은 valid JSON array여야 한다.
 
@@ -274,7 +274,7 @@ Multi-adapter single endpoint page는 먼저 serving shape를 설명한다. `tra
 
 #### Slide 34: LitServe request: adapter 미지정
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/034.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/034.png)
 
 이 페이지는 custom LitServe server의 calling method를 보여준다. 위쪽 small text는 retrain-pipelines가 Lightning AI LitServe를 custom implementation한 것을 사용한다고 설명한다. Service startup 시 YAML config에서 base model과 load할 adapter list를 얻는다. Screenshot의 cURL request는 `http://localhost:8765/predict`로 보내며, body에서 `adapter_name`은 empty string이고 queries는 `"Hello there."`와 `"Is 48 a perfect square?"`를 포함한다.
 
@@ -282,7 +282,7 @@ Multi-adapter single endpoint page는 먼저 serving shape를 설명한다. `tra
 
 #### Slide 35: base model raw response
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/035.jpg" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/035.jpg)
 
 이 slide는 adapter를 지정하지 않은 response body를 확대한다. Return은 array이며, 각 element는 `query`, `input_tokens_count`, `completion`, `new_tokens_count`를 포함한다. `Hello there.`에 대응하는 completion은 긴 natural language와 JavaScript/HTML example이고, `new_tokens_count`는 401까지 간다. `Is 48 a perfect square?`도 reasoning process text를 반환한다.
 
@@ -290,7 +290,7 @@ Multi-adapter single endpoint page는 먼저 serving shape를 설명한다. `tra
 
 #### Slide 36: `func_caller_lora` adapter response
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/036.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/036.png)
 
 이 페이지는 `adapter_name: "func_caller_lora"`를 enable한다. Request는 여전히 같은 두 query지만 response는 tool-call style로 바뀐다. `Hello there.`는 known tool과 match하지 않으므로 completion이 `[]`다. `Is 48 a perfect square?`는 `[{"name": "is_perfect_square", "arguments": {"num": 48}}]`로 변환된다. `new_tokens_count`도 이전 slide의 수백 token에서 20여 token으로 줄어든다.
 
@@ -298,7 +298,7 @@ Engineering perspective에서 named adapters switch는 PEFT의 `set_adapter/enab
 
 #### Slide 37: 같은 endpoint에서 adapter switch
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/037.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/037.png)
 
 이 slide는 no-adapter와 `func_caller_lora` 두 request를 같은 그림에 놓고, 오른쪽에 "Switching on/off any of the named adapters for batch queries"라고 기울여 적었다. 말하고 싶은 것은 여러 service를 띄우는 것이 아니라, 같은 `/predict` endpoint가 batch queries를 받고 `adapter_name`에 따라 특정 named adapter를 enable할지 결정한다는 것이다.
 
@@ -306,7 +306,7 @@ Engineering perspective에서 named adapters switch는 PEFT의 `set_adapter/enab
 
 #### Slide 38: Army of specialized experts
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/038.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/038.png)
 
 이 페이지는 위 example을 "specialized experts"로 추상화한다. Banner에는 scalable, adaptable enterprise agentic systems로 가는 한 걸음이라고 쓰여 있다. 아래 다섯 줄은 작은 model로 실행, high efficiency와 low VRAM, self-hosted로 full stack control, simple deployment, 많은 domain-expert adapters를 switch 가능하고 long-context prompt overhead가 없으며, 하나의 base model과 adapter group이 complete system을 이룬다는 내용이다.
 
@@ -314,13 +314,13 @@ Continuous learning main line으로 돌아오면 adapter는 one-off training art
 
 #### Slide 39: 목차: 전체 loop로 돌아가기
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/039.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/039.png)
 
 마지막으로 contents page로 돌아간다. Retraining framework, tool-calling, training/eval, serving을 하나의 line으로 묶는다는 의미다. Continuous learning의 어려움은 한 번 training하는 것이 아니라 data, training, evaluation, release, rollback을 장기적으로 maintainable하게 만드는 것이다.
 
 #### Slide 40: Ending page
 
-<img src="img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/040.png" referrerpolicy="no-referrer" />
+![](img/gosim-hangzhou-tech-analysis-industrializing-continuous-learning-e2b30259/040.png)
 
 Ending page는 더 펼치지 않는다. Pipeline과 function-calling adapter의 code path를 남겨두면 이후 reuse하기 더 편하다.
 

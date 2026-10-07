@@ -17,3 +17,5 @@
 3-cutlass-cute/cute-core/cute 노트 - reed.md
 2-cuda-kernels/gemm/도중에 험난한 길 — 행렬 곱 최적화 재탐구.md
 2-cuda-kernels/basics/B49_gpu_memory_hierarchy.md
+9-papers-lectures/papers/OSDI 2021 PET 논문 해설 (코드 생성 관련 작업).md
+1-dl-compiler/tvm/딥러닝 컴파일러의 Layout Transform 최적화.md

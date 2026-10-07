@@ -117,6 +117,13 @@ cp_file() {
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
 
+  # A raw <img src="img/x.png"> on its own line renders as-is: mkdocs rewrites
+  # relative paths in markdown images but not in HTML attributes, so with
+  # directory URLs the browser asks for /<article>/img/x.png and gets a 404.
+  # Turn those into markdown so the path gets rewritten. Only whole-line tags,
+  # to leave <img> inside an HTML block alone.
+  sed -i '' -E 's|^<img src="([^"]*)"[^>]*>[[:space:]]*$|![](\1)|' "$dst"
+
   local src_dir img_dst slug ns=0
   src_dir="$(dirname "$src")"
   img_dst="$(dirname "$dst")"
