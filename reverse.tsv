@@ -16,3 +16,4 @@
 2-cuda-kernels/gemm/how-to-optimize-gemm 기반 행렬 곱 최적화 탐구.md
 3-cutlass-cute/cute-core/cute 노트 - reed.md
 2-cuda-kernels/gemm/도중에 험난한 길 — 행렬 곱 최적화 재탐구.md
+2-cuda-kernels/basics/B49_gpu_memory_hierarchy.md

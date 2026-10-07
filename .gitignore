@@ -10,14 +10,3 @@ source.zh.md
 # 재작도로 교체된 레거시 원본 이미지 (GitHub 용량 절약, 로컬 보관용)
 # 슬래시 없는 패턴 → 어느 깊이의 legacy/ 디렉토리든 무시
 legacy/
-# sync.sh가 소스에서 매번 복사해 오는 이미지. 대부분 어느 글도 참조하지 않는데
-# 수천 개가 미추적으로 떠서 git status를 덮는다. 이미 추적 중인 파일은 .gitignore
-# 영향을 받지 않으므로, 커밋된 이미지의 변경은 그대로 보인다.
-# 글에 새로 필요한 이미지는 git add -f 로 추가한다. sync.sh 끝의 [NEEDS-ADD]
-# 리포트가 참조되는데 추적 안 된 이미지를 알려준다.
-content/**/*.png
-content/**/*.jpg
-content/**/*.jpeg
-content/**/*.gif
-content/**/*.webp
-content/**/*.svg

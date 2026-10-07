@@ -38,11 +38,22 @@ LEETCUDA="$HOME/leetcuda/blogs/ko"
 build_ns_set() {
   CONTENT="$CONTENT" MAPPING="$MAPPING" TVM="$TVM" CUDA="$CUDA" LEETCUDA="$LEETCUDA" \
   python3 - "$NS_SET" <<'PY'
-import os, sys, hashlib, collections
+import os, re, sys, hashlib, collections
 
 CONTENT=os.environ["CONTENT"]
 ROOT={"tvm":os.environ["TVM"],"cuda":os.environ["CUDA"],"leetcuda":os.environ["LEETCUDA"]}
 IMG=(".png",".jpg",".jpeg",".gif",".svg",".webp")
+
+REF=re.compile(r'!\[[^\]]*\]\(([^)\s]+)|<img[^>]*src="([^"]+)"')
+def refs(md):
+    out=set()
+    try: text=open(md, encoding="utf-8", errors="replace").read()
+    except OSError: return out
+    for m in REF.finditer(text):
+        u=(m.group(1) or m.group(2) or "").split("#")[0].split("?")[0].strip()
+        if not u or u.startswith(("http","data:","/")): continue
+        out.add(u[2:] if u.startswith("./") else u)
+    return out
 
 # (destination dir, figure name) -> [source article dir, ...]
 claims=collections.defaultdict(list)
@@ -58,14 +69,11 @@ for line in open(os.environ["MAPPING"], encoding="utf-8"):
         dst=os.path.join(dst.rstrip("/"), os.path.basename(src))
     dd=os.path.dirname(dst)
     sd=os.path.dirname(src)
-    for sub in ("images","img"):
-        d=os.path.join(sd,sub)
-        if not os.path.isdir(d): continue
-        for r,_,files in os.walk(d):
-            for fn in files:
-                if fn.lower().endswith(IMG):
-                    rel=os.path.relpath(os.path.join(r,fn), d)
-                    claims[(dd, sub+"/"+rel)].append(sd)
+    # only figures the article links to - those are the ones cp_file copies,
+    # so those are the only ones that can collide in the destination folder
+    for rel in refs(src):
+        if rel.lower().endswith(IMG) and os.path.isfile(os.path.join(sd, rel)):
+            claims[(dd, rel)].append(sd)
 
 def sha(path):
     h=hashlib.sha1()
@@ -89,6 +97,18 @@ open(sys.argv[1],"w",encoding="utf-8").write("".join(d+"\n" for d in sorted(need
 PY
 }
 
+# Every image an article links to, as written in the markdown (markdown syntax
+# and raw <img src>, local paths only).
+refd_images() {
+  grep -oE '!\[[^]]*\]\([^)]+\)|<img[^>]*src="[^"]+"' "$1" 2>/dev/null \
+    | grep -oE '\(([^)]+)\)|src="[^"]+"' \
+    | sed -E 's/^\(//; s/\)$//; s/^src="//; s/"$//; s/[#?].*$//' \
+    | grep -viE '^(https?:|data:|/)' \
+    | grep -iE '\.(png|jpe?g|gif|svg|webp)$' \
+    | sed -E 's|^\./||' \
+    | sort -u
+}
+
 cp_file() {
   local src="$1" dst="$2"
   if [[ "$dst" == */ ]] || [ -d "$dst" ]; then
@@ -96,35 +116,44 @@ cp_file() {
   fi
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
-  local src_dir img_dst slug
+
+  local src_dir img_dst slug ns=0
   src_dir="$(dirname "$src")"
   img_dst="$(dirname "$dst")"
   slug="$(basename "$src_dir")"
-  # images/ or img/ subdirectory
-  for img_dir in "$src_dir/images" "$src_dir/img"; do
-    [ -d "$img_dir" ] || continue
-    local sub; sub="$(basename "$img_dir")"
-    if grep -qxF "$src_dir" "$NS_SET"; then
-      rsync -a "$img_dir/" "$img_dst/$sub/$slug/"
-      # ](images/x.png  ->  ](images/<slug>/x.png   and the same for src="..."
-      # Strip an existing <slug>/ first, so a source copy that already carries
-      # the namespaced path (e.g. pushed back by reverse-sync.sh) is rewritten
-      # to the same thing instead of images/<slug>/<slug>/x.png.
+  grep -qxF "$src_dir" "$NS_SET" && ns=1
+
+  if [ "$ns" = 1 ]; then
+    # ](images/x.png  ->  ](images/<slug>/x.png   and the same for src="..."
+    # Strip an existing <slug>/ first, so a source copy that already carries the
+    # namespaced path (e.g. pushed back by reverse-sync.sh) is rewritten to the
+    # same thing instead of images/<slug>/<slug>/x.png.
+    local sub
+    for sub in images img; do
       sed -i '' \
         -e "s|](${sub}/${slug}/|](${sub}/|g" -e "s|src=\"${sub}/${slug}/|src=\"${sub}/|g" \
         -e "s|](${sub}/|](${sub}/${slug}/|g" -e "s|src=\"${sub}/|src=\"${sub}/${slug}/|g" \
         "$dst"
-      NS_COUNT=$((NS_COUNT + 1))
-      printf '  [NS] %s -> %s/%s/\n' "${dst#$CONTENT/}" "$sub" "$slug" >> "$NS_LOG"
-    else
-      rsync -a "$img_dir/" "$img_dst/$sub/"
+    done
+    NS_COUNT=$((NS_COUNT + 1))
+    printf '  [NS] %s -> <images|img>/%s/\n' "${dst#$CONTENT/}" "$slug" >> "$NS_LOG"
+  fi
+
+  # Copy only the figures this article actually links to. Copying each source
+  # folder wholesale used to drop thousands of unused files into content/.
+  local rel out
+  while IFS= read -r rel; do
+    [ -n "$rel" ] && [ -f "$src_dir/$rel" ] || continue
+    out="$rel"
+    if [ "$ns" = 1 ]; then
+      case "$rel" in
+        images/*) out="images/$slug/${rel#images/}" ;;
+        img/*)    out="img/$slug/${rel#img/}" ;;
+      esac
     fi
-  done
-  # sibling image files (e.g. ./img1.webp)
-  find "$src_dir" -maxdepth 1 -type f \
-    \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \
-       -o -name "*.gif" -o -name "*.svg" -o -name "*.webp" \) \
-    | while read img; do cp "$img" "$img_dst/"; done
+    mkdir -p "$img_dst/$(dirname "$out")"
+    cp "$src_dir/$rel" "$img_dst/$out"
+  done < <(refd_images "$src")
 }
 
 mk_index() {
