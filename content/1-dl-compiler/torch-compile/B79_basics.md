@@ -128,7 +128,7 @@ except Exception as e:
     print("Compilation of outer_function failed:", e)
 ```
 
-![torch.compiler.disable 함수 작용 범위](images/v2-9d6624f83f1d76f0f6c1ca1eed141a4b_1440w.jpg)
+![torch.compiler.disable 함수 작용 범위](images/B79_torch_compile_basics/v2-9d6624f83f1d76f0f6c1ca1eed141a4b_1440w.jpg)
 
 `torch.compiler.disable` 함수의 파라미터 `recursive` 값에 따라 작용 범위가 달라집니다:
 - `recursive=True`이면 TC가 해당 함수 및 호출하는 함수를 완전히 처리하지 않습니다.

@@ -6,11 +6,11 @@
 
 얼마 전 NanoDet C++ engineering note를 정리했다. MNN, NCNN, TNN, ONNXRuntime version의 C++ inference code를 통합한 글이다. 원문은 다음에 있다.
 
-![](images/img_001.png)
+![](images/A57_nanodet_plus_cpp/img_001.png)
 
 이틀 전 NanoDet 저자가 NanoDet을 NanoDet-Plus로 upgrade했다. 1ms 정도의 latency만 추가하면서 accuracy를 거의 30% 높였다.
 
-![](images/v2-69c7acc6d00f174469bde8efe8508d4c_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-69c7acc6d00f174469bde8efe8508d4c_1440w.jpg)
 
 NanoDet-Plus에서는 model output 수가 하나로 줄었다. 모든 output tensor를 미리 reshape한 뒤 concatenate하기 때문이다. 따라서 NanoDet-Plus에는 output이 하나뿐이고, 기존 deployment code는 더 이상 적용되지 않는다. 저자도 MNN, NCNN, OpenVINO, LibTorch를 포함해 C++ inference code를 다시 정리했다. 내가 이전에 repository에 통합해 둔 NanoDet C++ inference code도 더 이상 적용되지 않는다. 그래서 NanoDet-Plus를 대상으로 C++ inference code를 다시 만들기로 했다.
 
@@ -57,25 +57,25 @@ ONNXRuntime C++, MNN, TNN, NCNN version의 inference implementation은 모두 �
 
 제공한 링크에서 내려받을 수 있다. Baidu Drive code는 `8gin`이다. 또는 이 repository에서 직접 내려받을 수도 있다.
 
-![](images/v2-a6c2a7735cc810dcb22d6ddd8312411d_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-a6c2a7735cc810dcb22d6ddd8312411d_1440w.jpg)
 
 ### 3.2 MNN 모델 파일
 
 MNN 모델 파일 다운로드 주소다. Baidu Drive code는 `9v63`이다.
 
-![](images/v2-524f3562002a7acbbf888cb87113e980_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-524f3562002a7acbbf888cb87113e980_1440w.jpg)
 
 ### 3.3 TNN 모델 파일
 
 TNN 모델 파일 다운로드 주소다. Baidu Drive code는 `6o6k`이다.
 
-![](images/v2-a64277bc2f8c5a7d6557007025392484_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-a64277bc2f8c5a7d6557007025392484_1440w.jpg)
 
 ### 3.4 NCNN 모델 파일
 
 NCNN 모델 파일 다운로드 주소다. Baidu Drive code는 `sc7f`이다.
 
-![](images/v2-8c646571daecf45804e26823c8d03c28_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-8c646571daecf45804e26823c8d03c28_1440w.jpg)
 
 ## 4. Interface 문서
 
@@ -356,7 +356,7 @@ static void test_nanodet_plus()
 
 출력 결과는 다음과 같다.
 
-![](images/v2-0ca1babcfacc443d4b45e976b16f0dab_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-0ca1babcfacc443d4b45e976b16f0dab_1440w.jpg)
 
 ## 6. 빌드 및 실행
 
@@ -456,6 +456,6 @@ NanoDetPlus Detected Boxes Num: 9
 Testing Successful !
 ```
 
-![](images/v2-77e8b76eb4f13e998044b6411e2991d4_1440w.jpg)
+![](images/A57_nanodet_plus_cpp/v2-77e8b76eb4f13e998044b6411e2991d4_1440w.jpg)
 
 이전 글 모음은 계속 업데이트한다. 팔로우하면 된다.

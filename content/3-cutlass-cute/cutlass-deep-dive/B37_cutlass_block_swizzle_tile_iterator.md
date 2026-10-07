@@ -6,7 +6,7 @@
 
 [이전 글](../B34_cutlass_software_architecture/README.md)에서 GEMM 케이스 기반으로 repo의 SW 아키텍처와 일부 디테일을 정리했습니다.
 
-![](images/img_001.png)
+![](images/B37_cutlass_block_swizzle_tile_iterator/img_001.png)
 
 이후 글에서는 각 컴포넌트를 분해해 로직 분석. repo 컴포넌트가 많아 한 글에 다 넣으면 가독성 저하 → 실행 과정대로 여러 part로 분해. 본 글은 **block swizzle**과 **tile iterator** — 실행 과정의 시작점.
 
@@ -31,25 +31,25 @@ include/cutlass/gemm/threadblock/threadblock_swizzle.h
 include/cutlass/gemm/kernel/gemm.h
 ```
 
-![block swizzle 핵심 코드](images/v2-bcc3bca6bbb45435f653bb581bd87cd0_1440w.jpg)
+![block swizzle 핵심 코드](images/B37_cutlass_block_swizzle_tile_iterator/v2-bcc3bca6bbb45435f653bb581bd87cd0_1440w.jpg)
 
 GPU에서 block 발사 순서는 x → y → z. `((block_idx_x) & ((1 << (log_tile)) - 1))`은 **x축 modulo 연산** — hyper-param이 2의 거듭제곱이라 **비트 연산으로 modulo 등가**, 비트 연산이 비용 더 작음.
 
-![gemm.h 호출 로직](images/v2-16ae5ce4b0cd3c893576919767389aa6_1440w.jpg)
+![gemm.h 호출 로직](images/B37_cutlass_block_swizzle_tile_iterator/v2-16ae5ce4b0cd3c893576919767389aa6_1440w.jpg)
 
 ### Block Swizzle 로직 분석
 
 **`4096 × 4096 × 1024` 행렬 곱** 예:
 
-![original 행렬 곱 — 3중 for 루프, M=N=4096, K=1024](images/v2-6f0c3bfc7c647af7ce8bf8030b2f8232_1440w.jpg)
+![original 행렬 곱 — 3중 for 루프, M=N=4096, K=1024](images/B37_cutlass_block_swizzle_tile_iterator/v2-6f0c3bfc7c647af7ce8bf8030b2f8232_1440w.jpg)
 
 threadblock tile `(64, 64)` 가정:
 
 > 무관 정보 배제를 위해 K 차원은 우선 무시. 실제 CUTLASS tile은 M·N·K 3차원이고 K는 reduce 축이라 swizzle에 영향 없음.
 
-![CUTLASS tile 선언, 본 절 계산과 무관](images/v2-82fbdbb8b57be9bd02ec1620f0b4fe06_1440w.jpg)
+![CUTLASS tile 선언, 본 절 계산과 무관](images/B37_cutlass_block_swizzle_tile_iterator/v2-82fbdbb8b57be9bd02ec1620f0b4fe06_1440w.jpg)
 
-![분할 후 계산 로직 — block swizzle 미적용 등가](images/v2-5aceb411f3262bdc29909a4054a35d9c_1440w.jpg)
+![분할 후 계산 로직 — block swizzle 미적용 등가](images/B37_cutlass_block_swizzle_tile_iterator/v2-5aceb411f3262bdc29909a4054a35d9c_1440w.jpg)
 
 block swizzle 미적용 시 각 threadblock tile을 `(tbm, tbn)`으로 표기하면, 스레드 블록은 **axis n 방향 `(n + (tbn-1)) / tbn` 개를 먼저 발사**한 뒤 axis m을 순회. n이 매우 크면 **사실상 긴 직사각형 행렬 곱** — 발사된 모든 block이 우 행렬의 다른 global 위치를 읽음.
 
@@ -65,7 +65,7 @@ $$\text{leftmem} = tbm \times k, \quad \text{rightmem} = k \times tbn$$
 
 step = 4 예:
 
-![step=4 계산 로직](images/v2-ddf790fec683d5881d0255fbd7f10591_1440w.jpg)
+![step=4 계산 로직](images/B37_cutlass_block_swizzle_tile_iterator/v2-ddf790fec683d5881d0255fbd7f10591_1440w.jpg)
 
 **On-chip cache는 비싼 자원이고 저장 공간이 작음**. 메모리 접근량이 L2 capacity 초과 시 이전 저장 내용이 밀려나 → 다시 접근 시 cache miss → HBM 접근 → load cycle 증가.
 
@@ -124,11 +124,11 @@ include/cutlass/conv/threadblock/conv2d_tile_iterator.h
 
 `conv2d_tile_iterator`는 공통 클래스 — load/store 구현:
 
-![conv2d_tile_iterator.h 핵심 코드](images/v2-3f85b71217d78b4c1b6e3b0f24924ae1_1440w.jpg)
+![conv2d_tile_iterator.h 핵심 코드](images/B37_cutlass_block_swizzle_tile_iterator/v2-3f85b71217d78b4c1b6e3b0f24924ae1_1440w.jpg)
 
 각 iterator 파일은 자체 요구로 특정 판단 — load pointer 인덱스 계산:
 
-![overview](images/v2-78fcaceba65b89a8b82f33d258ed939a_1440w.jpg)
+![overview](images/B37_cutlass_block_swizzle_tile_iterator/v2-78fcaceba65b89a8b82f33d258ed939a_1440w.jpg)
 
 ### Tile Iterator 로직 분석
 
@@ -136,7 +136,7 @@ shared memory load 방법: **각 threadblock 크기를 각 warp에 균분**, 각
 
 **analytic iterator** — 기초 구현, 로직 명확:
 
-![conv2d_fprop_activation_tile_access_iterator_analytic.h 핵심 로직](images/v2-d215675ef0c601c2b20d279062cb2a5c_1440w.jpg)
+![conv2d_fprop_activation_tile_access_iterator_analytic.h 핵심 로직](images/B37_cutlass_block_swizzle_tile_iterator/v2-d215675ef0c601c2b20d279062cb2a5c_1440w.jpg)
 
 n·p·q·k·r·s 의미는 CUTLASS 문서의 **implicit_gemm** 로직 참고.
 
@@ -144,12 +144,12 @@ iterator 생성자에서 각 stride에 대해 **n·p·q 값 미리 계산**. `at
 
 여기서 발견 — n·h·w·c 계산·판단에 **scalar 연산이 많음**. GPU에서 이런 연산(특히 `&&`)은 비용이 큼 — 가능한 한 불필요 scalar 연산 최적화 필요. **optimized iterator의 처리가 매우 정교**:
 
-![optimized.h의 bit masks 계산 로직 — 생성자에서 precompute](images/v2-22b45f00754e9aa5ed18b12d6bcdb0cf_1440w.jpg)
+![optimized.h의 bit masks 계산 로직 — 생성자에서 precompute](images/B37_cutlass_block_swizzle_tile_iterator/v2-22b45f00754e9aa5ed18b12d6bcdb0cf_1440w.jpg)
 
 각 stride에 대해 **특정 슬라이딩 윈도 위치 접근 시 valid 여부를 미리 계산** — boolean이므로 **int32 하나에 비트로 표현**. 예: 3×3 kernel에서 kw mask가 `00000011`(앞 8 bit만) — kw가 슬라이딩 윈도 `(x, 0), (x, 1)` 접근 시 read, `(x, 2)`는 안 함. 본질은 **공간으로 시간 교환**.
 
-![masks 총 공간 — 2는 슬라이딩 윈도 h, w 고려](images/v2-537dd2796758ac908d6e10efa7c3cc35_1440w.png)
+![masks 총 공간 — 2는 슬라이딩 윈도 h, w 고려](images/B37_cutlass_block_swizzle_tile_iterator/v2-537dd2796758ac908d6e10efa7c3cc35_1440w.png)
 
-![predicates 출력](images/v2-ab20aaacdece5c4e1e280645e20f3509_1440w.jpg)
+![predicates 출력](images/B37_cutlass_block_swizzle_tile_iterator/v2-ab20aaacdece5c4e1e280645e20f3509_1440w.jpg)
 
 코드에서 **scalar 연산 많이 감소** → load 시 인덱스 계산에 덜 bound. 그러나 전체 GEMM for loop 메모리 접근 인덱스 계산 관점에서는 추가 최적화 여지 — 하지만 **컴포넌트 단위**라 DSL처럼 **overall symbolic 표현으로 대수 단순화·공통 부분식 제거** 불가. NVCC 내부 분석 능력에 의존. 이런 작성법 자체에 한계 — 예: 이전에 `CS2R` 같은 이상한 명령에 bound된 적 있음. 컴파일러가 최적화하기 어려운 영역.

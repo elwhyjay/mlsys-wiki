@@ -39,7 +39,7 @@
 
 https://github.com/flame/how-to-optimize-gemm/wiki 에서는 다양한 최적화 방법으로 GEMM을 최적화하는 방법을 소개하고 있습니다. 기본 방법은 출력을 여러 개의 4×4 sub-block으로 나누어 입력 데이터의 재사용을 높이는 것입니다. 동시에 register를 대량으로 사용하여 메모리 접근을 줄이고, 메모리 접근과 계산을 vectorize 하며, 포인터 계산을 제거하고, 메모리를 주소가 연속되도록 재구성합니다. 최종적으로 GEMM의 성능을 원본 버전 대비 8배 이상으로 끌어올립니다.
 
-![이미지](images/img_01.png)how-to-optimize-gemm의 성능 그래프, 원본의 GFlops는 약 1.0 정도이고, 최적화 후에는 10GFlops에 가까워집니다![이미지](images/img_02.png)원본 버전의 GFlops, 여기서 사용한 하드웨어는 Core i5 CPU입니다
+![이미지](images/compiler_guide_operator_opt/img_01.png)how-to-optimize-gemm의 성능 그래프, 원본의 GFlops는 약 1.0 정도이고, 최적화 후에는 10GFlops에 가까워집니다![이미지](images/compiler_guide_operator_opt/img_02.png)원본 버전의 GFlops, 여기서 사용한 하드웨어는 Core i5 CPU입니다
 
 저는 how-to-optimize-gemm을 좀 더 간단히 수정한 버전을 만들어, 각 최적화 단계의 gflops를 더 직관적으로 확인할 수 있도록 했습니다. 주소는 다음과 같습니다. `https://github.com/BBuf/tvm_learn/tree/main/optimize_gemm/src`. 관심 있는 독자는 위에서 언급한 단계별 GEMM 최적화 블로그를 학습하면서 GEMM의 일반적인 최적화 기법들을 익혀 보시기 바랍니다. 제 테스트 기록에서 보면 **「block 분할과 register 대량 사용」** 그리고 **「메모리를 주소가 연속되도록 재구성」** 하는 것이 성능 향상의 핵심이었습니다(물론 시간 절약을 위해 이 부분을 학습하지 않아도 큰 문제는 없으며, 이후 설명에 영향을 주지 않습니다).
 
@@ -114,7 +114,7 @@ https://github.com/flame/how-to-optimize-gemm/wiki 에서는 다양한 최적화
 
 그래서 Ansor 논문에서 X86에서의 단일 operator 최적화 능력 Benchmark 그래프를 가져왔습니다. 여기서 NRM이 2D GEMM을 의미합니다. 다만 아쉽게도 논문은 이 행렬의 크기를 언급하지 않습니다 QAQ. 이 그래프를 보면 Ansor는 GEMM 최적화에서 매우 강력한데, 그렇다면 여기서는 왜 기대한 결과가 나오지 않았을까요? 제 생각에는, 행렬이 매우 작은 경우에는 Ansor의 많은 scheduler들(예: cache_read, parallel, reorder)이 별다른 이득을 가져오지 않습니다. 왜냐하면 이때는 register를 가득 채워 쓰는지와 계산 중복을 제거하는 것이 관건이기 때문입니다. 그래서 행렬이 비교적 클 때 Ansor의 효과가 더 좋을 것이라고 추측합니다.
 
-![이미지](images/img_04.png)Ansor 단일 operator의 튜닝 BenchMark
+![이미지](images/compiler_guide_operator_opt/img_04.png)Ansor 단일 operator의 튜닝 BenchMark
 
 작은 행렬에서 성능이 평범하다면, Ansor가 큰 행렬에서는 더 나은 gflops를 얻을 수 있을까요? 계속 시도해 보겠습니다. 행렬의 m, n, k를 각각 2048, 24, 2048로 설정하고, `num_measure_trials`를 100으로, `target = tvm.target.Target("llvm -mcpu=skylake-avx512")`로 설정한 뒤 최종 gflops를 보겠습니다.
     

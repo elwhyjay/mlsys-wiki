@@ -10,37 +10,37 @@
 
 CUDA Core와 마찬가지로 Tensor Core도 연산 유닛이며, 행렬 곱 연산을 전담합니다. 아래 그림은 Turing TU102/TU104/TU106의 SM 내부 구조로, 4개의 processing block으로 나뉘며 각 processing block은 16개 FP32 Core, 16개 INT32 Core, 2개 Tensor Core, 1개 Warp Scheduler, 1개 Dispatch Unit을 포함합니다.
 
-![Turing SM 내부 구조](images/v2-761ee60c75c4fe58e1de823bd1fb95a0_1440w.jpg)
+![Turing SM 내부 구조](images/B66_tensor_core_intro/v2-761ee60c75c4fe58e1de823bd1fb95a0_1440w.jpg)
 
 ## 3. 아키텍처
 
 Volta에서 1세대 Tensor Core가 등장한 이후, 매 세대 아키텍처 업그레이드마다 Tensor Core는 크게 개선되었고 지원 데이터 타입도 점점 늘어났습니다.
 
-![세대별 Tensor Core 비교](images/v2-e2eee434b4e295d46ff57809e0ed9c2f_1440w.jpg)
+![세대별 Tensor Core 비교](images/B66_tensor_core_intro/v2-e2eee434b4e295d46ff57809e0ed9c2f_1440w.jpg)
 
 ### 3.1 Volta Tensor Core
 
 1세대 Tensor Core는 FP16·FP32 혼합 정밀도 행렬 곱을 지원하며, 초당 100 TFLOPS 이상의 딥러닝 성능을 제공합니다. Pascal 아키텍처 대비 5배 이상입니다. Pascal과 비교하면 학습용 최고 TFLOPS 성능은 최대 12배, 추론용 최고 TFLOPS 성능은 최대 6배, 학습·추론 성능 전반이 3배 향상되었습니다.
 
-![Volta Tensor Core](images/img_001.jpg)
+![Volta Tensor Core](images/B66_tensor_core_intro/img_001.jpg)
 
 ### 3.2 Turing Tensor Core
 
 2세대 Tensor Core는 딥러닝 학습·추론을 위한 다양한 정밀도(FP32에서 FP16, INT8, INT4까지)를 제공하며, 초당 최대 500조 회의 텐서 연산을 수행할 수 있습니다.
 
-![Turing Tensor Core](images/img_002.jpg)
+![Turing Tensor Core](images/B66_tensor_core_intro/img_002.jpg)
 
 ### 3.3 Ampere Tensor Core
 
 3세대 Tensor Core는 **Tensor Float 32(TF32)** 정밀도 표준과 64비트 부동소수점(FP64)을 새롭게 채택하여, AI 애플리케이션을 가속·단순화하며 최대 20배까지 AI 속도를 끌어올립니다.
 
-![Ampere Tensor Core](images/v2-67e219d4ddf5c4e3cd285d8b41aeb1e8_1440w.jpg)
+![Ampere Tensor Core](images/B66_tensor_core_intro/v2-67e219d4ddf5c4e3cd285d8b41aeb1e8_1440w.jpg)
 
 ### 3.4 Hopper Tensor Core
 
 4세대 Tensor Core는 새로운 **8비트 부동소수점 정밀도(FP8)** 를 사용하여 조(trillion) 단위 파라미터 모델 학습에서 FP16 대비 6배의 성능을 제공합니다. FP8은 Transformer engine에 적용되어 FP8·FP16 혼합 정밀도 모드를 활용할 수 있으며, Transformer 학습을 크게 가속하면서도 정확도를 유지합니다. FP8은 대규모 언어 모델 추론 속도도 대폭 끌어올려, Ampere 대비 최대 30배의 성능 향상을 보입니다.
 
-![Hopper Tensor Core](images/v2-e500d1d463eed1975a08ea6ac6fc2ab2_1440w.jpg)
+![Hopper Tensor Core](images/B66_tensor_core_intro/v2-e500d1d463eed1975a08ea6ac6fc2ab2_1440w.jpg)
 
 ## 4. 호출 방법
 

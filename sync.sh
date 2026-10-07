@@ -27,19 +27,66 @@ LEETCUDA="$HOME/leetcuda/blogs/ko"
 
 # Several source articles can map into the same content/ directory, and many of
 # them name their figures generically (images/img_01.png). Copied flat, the last
-# mapping line wins and every earlier article renders the wrong figure. So: copy
-# flat while the name is free, and as soon as a name is already taken by a
-# DIFFERENT file, move this article's whole images/ tree under images/<slug>/ and
-# rewrite its own links to match. First mapping line keeps the flat path.
-needs_ns() {
-  local img_dir="$1" img_dst="$2" sub="$3"
-  local f rel existing
-  while IFS= read -r f; do
-    rel="${f#$img_dir/}"
-    existing="$img_dst/$sub/$rel"
-    [ -e "$existing" ] && ! cmp -s "$f" "$existing" && return 0
-  done < <(find "$img_dir" -type f)
-  return 1
+# mapping line wins and every earlier article renders the wrong figure.
+#
+# So: when two articles landing in the same directory provide the same figure
+# name with DIFFERENT content, both move their images under images/<source-dir>/
+# and their own links are rewritten to match. The decision is computed up front
+# from mapping.tsv and the sources only — never from what happens to be in
+# content/ already — so the tree is the same no matter how often sync runs or
+# what was deleted in between.
+build_ns_set() {
+  CONTENT="$CONTENT" MAPPING="$MAPPING" TVM="$TVM" CUDA="$CUDA" LEETCUDA="$LEETCUDA" \
+  python3 - "$NS_SET" <<'PY'
+import os, sys, hashlib, collections
+
+CONTENT=os.environ["CONTENT"]
+ROOT={"tvm":os.environ["TVM"],"cuda":os.environ["CUDA"],"leetcuda":os.environ["LEETCUDA"]}
+IMG=(".png",".jpg",".jpeg",".gif",".svg",".webp")
+
+# (destination dir, figure name) -> [source article dir, ...]
+claims=collections.defaultdict(list)
+for line in open(os.environ["MAPPING"], encoding="utf-8"):
+    line=line.rstrip("\n")
+    if not line or line.startswith("#"): continue
+    f=line.split("\t")
+    if len(f)<3 or f[0] not in ROOT: continue
+    src=os.path.join(ROOT[f[0]], f[1])
+    if not os.path.isfile(src): continue
+    dst=os.path.join(CONTENT, f[2])
+    if f[2].endswith("/") or os.path.isdir(dst):
+        dst=os.path.join(dst.rstrip("/"), os.path.basename(src))
+    dd=os.path.dirname(dst)
+    sd=os.path.dirname(src)
+    for sub in ("images","img"):
+        d=os.path.join(sd,sub)
+        if not os.path.isdir(d): continue
+        for r,_,files in os.walk(d):
+            for fn in files:
+                if fn.lower().endswith(IMG):
+                    rel=os.path.relpath(os.path.join(r,fn), d)
+                    claims[(dd, sub+"/"+rel)].append(sd)
+
+def sha(path):
+    h=hashlib.sha1()
+    with open(path,"rb") as fh:
+        for chunk in iter(lambda: fh.read(1<<16), b""): h.update(chunk)
+    return h.digest()
+
+# A name claimed by one article is fine. Claimed by several with identical bytes
+# is also fine - they overwrite each other with the same file. Only differing
+# bytes force every claimant to move under its own subdirectory.
+need=set()
+for (dd, rel), dirs in claims.items():
+    if len(dirs)<2: continue
+    digests={}
+    for sd in dirs:
+        try: digests[sd]=sha(os.path.join(sd, rel))
+        except OSError: pass
+    if len(set(digests.values()))>1:
+        need.update(digests)
+open(sys.argv[1],"w",encoding="utf-8").write("".join(d+"\n" for d in sorted(need)))
+PY
 }
 
 cp_file() {
@@ -57,10 +104,16 @@ cp_file() {
   for img_dir in "$src_dir/images" "$src_dir/img"; do
     [ -d "$img_dir" ] || continue
     local sub; sub="$(basename "$img_dir")"
-    if needs_ns "$img_dir" "$img_dst" "$sub"; then
+    if grep -qxF "$src_dir" "$NS_SET"; then
       rsync -a "$img_dir/" "$img_dst/$sub/$slug/"
       # ](images/x.png  ->  ](images/<slug>/x.png   and the same for src="..."
-      sed -i '' -e "s|](${sub}/|](${sub}/${slug}/|g" -e "s|src=\"${sub}/|src=\"${sub}/${slug}/|g" "$dst"
+      # Strip an existing <slug>/ first, so a source copy that already carries
+      # the namespaced path (e.g. pushed back by reverse-sync.sh) is rewritten
+      # to the same thing instead of images/<slug>/<slug>/x.png.
+      sed -i '' \
+        -e "s|](${sub}/${slug}/|](${sub}/|g" -e "s|src=\"${sub}/${slug}/|src=\"${sub}/|g" \
+        -e "s|](${sub}/|](${sub}/${slug}/|g" -e "s|src=\"${sub}/|src=\"${sub}/${slug}/|g" \
+        "$dst"
       NS_COUNT=$((NS_COUNT + 1))
       printf '  [NS] %s -> %s/%s/\n' "${dst#$CONTENT/}" "$sub" "$slug" >> "$NS_LOG"
     else
@@ -130,7 +183,9 @@ copied=0
 missing=0
 NS_COUNT=0
 NS_LOG="$(mktemp)"
-trap 'rm -f "$MANAGED" "$NS_LOG"' EXIT
+NS_SET="$(mktemp)"
+trap 'rm -f "$MANAGED" "$NS_LOG" "$NS_SET"' EXIT
+build_ns_set
 
 while IFS=$'\t' read -r source src_rel wiki_path; do
   # skip comments and blank lines
@@ -232,6 +287,40 @@ if [ "$orphans" -eq 0 ]; then
   echo "  none"
 else
   echo "  $orphans orphan(s). 졸업/직접작성 글이면 그대로 두고, 옛 산출물이면 직접 삭제하세요."
+fi
+
+# ── images referenced but not tracked ──────────────────────────────────────
+# content/ 아래 이미지는 .gitignore 로 가려져 있다. 소스에서 딸려오는 수천 개가
+# git status 를 덮기 때문이다. 그래서 글이 실제로 쓰는 이미지가 커밋에서 조용히
+#빠질 수 있다. 여기서 그런 파일을 찾아 git add -f 명령까지 만들어 준다.
+
+if [ -d "$WIKI/.git" ] && command -v git >/dev/null 2>&1; then
+  echo ""
+  echo "=== 참조되는데 git에 없는 이미지 ==="
+  REFD="$(mktemp)"; TRACKED="$(mktemp)"
+  find "$CONTENT" -name '*.md' -print0 | while IFS= read -r -d '' f; do
+    d="$(dirname "$f")"
+    grep -oE '!\[[^]]*\]\([^)]+\)|<img[^>]*src="[^"]+"' "$f" 2>/dev/null \
+      | grep -oE '\(([^)]+)\)|src="[^"]+"' \
+      | sed -E 's/^\(//; s/\)$//; s/^src="//; s/"$//' \
+      | grep -viE '^(https?:|data:|/)' \
+      | grep -iE '\.(png|jpe?g|gif|svg|webp)$' \
+      | while IFS= read -r rel; do
+          rel="${rel%%#*}"; rel="${rel%%\?*}"
+          [ -f "$d/$rel" ] && printf '%s\n' "${d#$WIKI/}/$rel"
+        done
+  done | sort -u > "$REFD"
+  git -C "$WIKI" ls-files -- content | sort -u > "$TRACKED"
+  need=$(comm -23 "$REFD" "$TRACKED")
+  if [ -z "$need" ]; then
+    echo "  none"
+  else
+    printf '%s\n' "$need" | sed 's/^/  [NEEDS-ADD] /'
+    echo ""
+    echo "  content/ 이미지는 .gitignore 로 가려져 있으므로 -f 로 추가한다:"
+    printf '%s\n' "$need" | sed "s/.*/    git add -f '&'/"
+  fi
+  rm -f "$REFD" "$TRACKED"
 fi
 
 # ── summary ────────────────────────────────────────────────────────────────

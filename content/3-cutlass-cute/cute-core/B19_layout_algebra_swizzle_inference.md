@@ -53,11 +53,11 @@ struct Swizzle{/*...*/};
 
 32색 시각화는 어렵기 때문에 본 글에서는 공유 메모리를 **8 bank**로 가정. 매번 읽을 메모리는 한 공유 메모리 요청 내용에 대응하며 HW에서 추가 분할되지 않으므로, 한 트랜잭션에 모든 내용을 읽어야 합니다. 단순한 `p = row * 8 + col` layout이면 한 열의 내용이 같은 bank에 분포 → 8×8 행렬 읽기에 **8-way bank conflict**.
 
-![연속 layout](images/v2-ef4223f2914c13e842bd1d4b526e596a_1440w.jpg)
+![연속 layout](images/B19_layout_algebra_swizzle_inference/v2-ef4223f2914c13e842bd1d4b526e596a_1440w.jpg)
 
 Swizzle 기본을 알면 이 시나리오의 계산은 매우 간단 — 열 좌표를 단순 `col`에서 `row * 8 + (row ^ col)` 또는 `p ^ (p >> 3)`로 변경(CuTe는 행·열 구분 없이 위 `p = row * 8 + col` 결과로 추가 계산). 실제 행렬 행이 8보다 클 수 있지만 `row` 중 8 초과 부분을 mod로 8행 내 문제로 정규화. 행 길이도 8이므로 완전한 주소 공식은 `p ^ ((p & (7 << 3)) >> 3)`, 대응 layout `Swizzle<3, 0, 3>`. 즉 이 경우 **B = S = log(M), M = 0**.
 
-![Swizzle(3, 0, 3)](images/v2-fd348023de21a5e3b4f95bf7f79e8260_1440w.jpg)
+![Swizzle(3, 0, 3)](images/B19_layout_algebra_swizzle_inference/v2-fd348023de21a5e3b4f95bf7f79e8260_1440w.jpg)
 
 선형 layout 관점에서 이 layout은:
 
@@ -69,7 +69,7 @@ $$\begin{bmatrix} 1 & 0 & 0 & 1 & 0 & 0 \\ 0 & 1 & 0 & 0 & 1 & 0 \\ 0 & 0 & 1 & 
 
 행 수 증가 처리에서 자연스러운 질문 — 위 접근 모드 유지하며 행렬을 가로로 늘리면? 예: 8행 32열로 늘리면? 선형 layout 또는 이진 표현으로 생각하면, 계산식은 여전히 `row ^ col`이지만 `row`에 해당하는 비트가 2칸 이동, `row`는 하위 3비트만 사용 제한. `p` 표현: `p ^ ((p & (7 << 5)) >> 5)`, `Swizzle<3, 0, 5>` 대응. 즉 **행렬 가로 확장은 S만 늘리면 됨**.
 
-![Swizzle(3, 0, 5)](images/v2-7b0671f92f71feefb81d590d902125bf_1440w.jpg)
+![Swizzle(3, 0, 5)](images/B19_layout_algebra_swizzle_inference/v2-7b0671f92f71feefb81d590d902125bf_1440w.jpg)
 
 선형 layout:
 
@@ -81,7 +81,7 @@ $$\begin{bmatrix} 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\ 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0
 
 가로 확장이 가능하니 자연히 축소도 가능. 예: 8×4. 가로 확장 경험상 S만 줄이면 될 듯. `Swizzle<3, 0, 2>` layout:
 
-![Swizzle(3, 0, 2)](images/img_001.jpg)
+![Swizzle(3, 0, 2)](images/B19_layout_algebra_swizzle_inference/img_001.jpg)
 
 **그러나 CuTe에서는 이를 허용하지 않습니다**. 코드에 다음 줄:
 
@@ -105,7 +105,7 @@ $$\begin{bmatrix} 1 & 0 & 0 & 1 & 0 \\ 0 & 1 & 0 & 0 & 1 \\ 0 & 0 & 1 & 0 & 0 \\
 
 한 열 접근 시 $\begin{bmatrix} 0 & 1 & 0 \\ 0 & 0 & 1 \\ 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix}$. 앞 3행 만계수 → bank conflict 없음. **행렬 가로 축소의 layout은 S 감소가 아니라 B 감소**, `Swizzle<2, 0, 3>`.
 
-![Swizzle(2, 0, 3)](images/img_002.jpg)
+![Swizzle(2, 0, 3)](images/B19_layout_algebra_swizzle_inference/img_002.jpg)
 
 ## 단순 변형: 다열 접근
 
@@ -113,7 +113,7 @@ $$\begin{bmatrix} 1 & 0 & 0 & 1 & 0 \\ 0 & 1 & 0 & 0 & 1 \\ 0 & 0 & 1 & 0 & 0 \\
 
 이는 사실 **4행 4열 행렬에서 한 번에 한 열 접근하는 것과 동등** — "열" 개념을 약간 수정. 두 행을 한 행으로 사용한다고 보고, **`Swizzle<2, 0, 2>`에 M을 늘려 `Swizzle<2, 1, 2>`** 로 변경.
 
-![Swizzle(2, 1, 2)](images/img_003.jpg)
+![Swizzle(2, 1, 2)](images/B19_layout_algebra_swizzle_inference/img_003.jpg)
 
 대응 선형 layout은 좌상단에 1을 추가:
 
@@ -135,23 +135,23 @@ $$\begin{bmatrix} 1 & 0 & 0 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 & 1 & 0 \\ 0 & 0 & 1 & 
 
 실제 행렬 크기는 HW 제약에 따라 2의 거듭제곱과 정확히 일치하기 어렵습니다. 예: 알고리즘에서 가장 적합한 행렬 크기가 **8×24**일 수 있고, 1행 8열 또는 8행 1열 접근이 여전히 필요. 어떻게? 답은 **아무것도 할 필요 없음** — 행 길이가 2의 거듭제곱일 때의 `row ^ col` 방법대로, 단 행 길이만 24로 — `row * 24 + (row ^ col)`. `p` 표현은 더 이상 어렵습니다.
 
-![Swizzle(3, 0, 3) 24열 확장](images/v2-f6add354739f6877690c1e56d2fbb44d_1440w.jpg)
+![Swizzle(3, 0, 3) 24열 확장](images/B19_layout_algebra_swizzle_inference/v2-f6add354739f6877690c1e56d2fbb44d_1440w.jpg)
 
 그림처럼 8×8 케이스가 가로로 두 번 더 복제된 형태일 뿐.
 
 이 경우 **8 열 부분만 신경 쓰면** 되므로 `p`로도 표현 가능: `p ^ ((p & (7 << 2)) >> 3)`. TMA가 HW Swizzle에 행 길이 제한을 두지만 실제 행 길이는 임의 정수배 가능. 32B와 96B의 Swizzle layout은 행 길이 외에 차이 없음.
 
-![Swizzle(3, 0, 3) 8x24 좌표에 직접 적용](images/v2-89187e1922a3082ffff1aef2d450fa14_1440w.jpg)
+![Swizzle(3, 0, 3) 8x24 좌표에 직접 적용](images/B19_layout_algebra_swizzle_inference/v2-89187e1922a3082ffff1aef2d450fa14_1440w.jpg)
 
 ## 특수 변형: 나누어떨어지지 않는 경우
 
 가로 확장은 항상 단순하지만 가로 축소는 특수. 행 길이가 2의 거듭제곱이 아닐 때, 행 길이가 동시 접근 열 수로 나누어떨어지면 접근 모드를 가로로 복제하면 됨. 그렇지 않으면? 우선 layout:
 
-![8×9 행렬 layout](images/v2-a513becb84d23dd62d7366ea4c58fd90_1440w.jpg)
+![8×9 행렬 layout](images/B19_layout_algebra_swizzle_inference/v2-a513becb84d23dd62d7366ea4c58fd90_1440w.jpg)
 
 예: 8×9 행렬에서 4행 2열 접근하려는데 `col`에 대한 XOR로는 충돌을 완전히 제거할 수 없음. 길이 막다른 길은 없음 — 한 행을 두 행으로 쓸 수 있다면 **두 행을 한 행으로 쓰는 것**도 가능 → 4×18로 보면 됨.
 
-![가능한 swizzle 방법](images/img_004.jpg)
+![가능한 swizzle 방법](images/B19_layout_algebra_swizzle_inference/img_004.jpg)
 
 후 4행이 비정렬임에 주의. 필요하면 열에 오프셋을 더해 정렬 위치로 이동 가능.
 

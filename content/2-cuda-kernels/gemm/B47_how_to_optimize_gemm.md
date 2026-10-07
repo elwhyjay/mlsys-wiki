@@ -60,7 +60,7 @@
 
 독자가 이미 다음을 알고 있다고 가정합니다.
 
-- 白牛: [OpenBLAS gemm from scratch 입문](https://example.com) — 블로킹을 다시 설명할 필요가 없도록
+- 白牛: [OpenBLAS gemm from scratch 입문](https://zhuanlan.zhihu.com/p/65436463) — 블로킹을 다시 설명할 필요가 없도록
 - `tpoisonooo/how-to-optimize-gemm`을 어떻게 빌드·실행하는지 — 가는 김에 ⭐도 한 번 눌러 주세요
 
 먼저 최종 결과부터 봅시다. 첫 버전 / 최신 버전 / cuBLAS의 비교:
@@ -86,9 +86,9 @@
 
 핵심 컨닝페이퍼:
 
-- MegEngine Bot: [CUDA 행렬 곱 궁극 최적화 가이드](https://example.com) — 소스코드는 없고, 앞 8개 버전은 모두 이 글의 텍스트만 보고 추측해서 작성했습니다
-- 李少侠: [\[공사 중\] CUDA GEMM 이론 성능 분석과 kernel 최적화](https://example.com) — 少侠의 글은 깊이가 있어서 후반 사고 정리용으로 적합합니다
-- MegEngine Bot: [MegEngine TensorCore 합성곱 연산자 구현 원리](https://example.com) — 확장 독해용
+- MegEngine Bot: [CUDA 행렬 곱 궁극 최적화 가이드](https://zhuanlan.zhihu.com/p/410278370) — 소스코드는 없고, 앞 8개 버전은 모두 이 글의 텍스트만 보고 추측해서 작성했습니다
+- 李少侠: [\[공사 중\] CUDA GEMM 이론 성능 분석과 kernel 최적화](https://zhuanlan.zhihu.com/p/441146275) — 少侠의 글은 깊이가 있어서 후반 사고 정리용으로 적합합니다
+- MegEngine Bot: [MegEngine TensorCore 합성곱 연산자 구현 원리](https://zhuanlan.zhihu.com/p/372973726) — 확장 독해용
 
 ## 0x02 첫 번째 버전: MMult_cuda_2
 

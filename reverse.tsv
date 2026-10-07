@@ -1,0 +1,18 @@
+# reverse.tsv — reverse-sync opt-in list (wiki → source)
+#
+# Files listed here are pushed BACK from content/ into their source repo by
+# reverse-sync.sh. Use this when you have hand-edited a wiki copy (e.g. redrawn
+# diagrams) and want the change reflected in source so the next forward sync.sh
+# does not revert it.
+#
+# Each line must correspond to an existing mapping.tsv line: reverse-sync.sh
+# looks up the wiki_path here in mapping.tsv to find the source location.
+# Format: one wiki_path (the 3rd column of mapping.tsv) per line.
+#
+# Comment out or remove a line to stop reverse-syncing that file.
+
+2-cuda-kernels/gemm/B65_cuda_gemm_detail.md
+2-cuda-kernels/gemm/B47_how_to_optimize_gemm.md
+2-cuda-kernels/gemm/how-to-optimize-gemm 기반 행렬 곱 최적화 탐구.md
+3-cutlass-cute/cute-core/cute 노트 - reed.md
+2-cuda-kernels/gemm/도중에 험난한 길 — 행렬 곱 최적화 재탐구.md

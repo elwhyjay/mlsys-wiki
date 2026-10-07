@@ -78,7 +78,7 @@ elementwise_add<<<grid_size, block_size>>>(A, B, C, N);
 
 OneFlow 측 글이 매우 잘 설명합니다. 일독을 권합니다.
 
-![OneFlow grid/block 가이드](images/img_001.png)
+![OneFlow grid/block 가이드](images/B62_element_wise_detail/img_001.png)
 *OneFlow: CUDA Kernel의 grid_size, block_size를 어떻게 설정할까? (263 추천)*
 
 주요 포인트:
@@ -151,7 +151,7 @@ CUDA C/C++ 표준 헤더의 벡터 타입(`int2`, `int4`, `float2`, `float4`)을
 
 `float4`로 접근하면 thread 하나가 한 번에 4개 원소를 계산. **원래 N개 float를 계산하던 것이 N/4개 float4를 계산하는 셈**.
 
-![float4 표](images/v2-c825a9ff8b651750fcbf132648cc1de7_1440w.jpg)
+![float4 표](images/B62_element_wise_detail/v2-c825a9ff8b651750fcbf132648cc1de7_1440w.jpg)
 
 루프 step은 `4 * num_threads`. 또한 N이 4의 배수가 아닐 수 있으므로 **마지막 회는 원소가 4개 미만일 수 있어 특수 처리** 필요.
 

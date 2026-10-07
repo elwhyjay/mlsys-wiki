@@ -304,7 +304,7 @@ Triton 공식은 DSL에 대해 PyTorch, TensorFlow 또는 TVM 같은 도구처�
 
 두 번째 부분은 id를 출력 tensor의 각 block에 매핑하는 것인데, 이 부분은 tutorial에서 L2 Cache 적중률을 높이기 위함이라고 설명하고 있습니다. 글에서 OpenAI는 "super-grouping"이라는 명칭을 사용하여 한 block 안에 포함된 block의 개수를 표현합니다. 사실 super-grouping의 원리는 매우 간단합니다. 다음 그림을 보겠습니다.
 
-![이미지](images/img_01.png)
+![이미지](images/triton_mlir_1_dsl/img_01.png)
 
 AxB=C 연산을 진행할 때, A의 데이터를 load할 때 row-major 방식으로 한 번에 9개의 block을 읽고, 그렇게 해서 C 행렬의 첫 번째 행 결과를 얻으려 한다면, C의 저장 방식 또한 row-major 방식이라고 했을 때, 원하는 결과를 얻기까지 총 9+81=90번의 block load 연산과 9번의 block write 연산이 필요합니다. 그러나 "super-grouping" 방식을 채택한다면, 동일하게 C 행렬에서 9번의 block write 연산을 얻기 위해서 A 행렬에 대해서는 9*3번의 load 연산을 진행하고, B 행렬에 대해서도 마찬가지로 9*3번의 load 연산을 진행하므로, block 전체에 대한 load 연산은 27+27=54번이 됩니다. 두 가지를 비교해 보면, 첫 번째 방식은 총 90번의 load + 9번의 write를 진행한 데 반해, 두 번째인 super-grouping 기법은 54번의 load와 9번의 write를 진행한 것이 됩니다. 게다가 OpenAI는 비고에서 A100에서 220TFLOPS에서 245TFLOPS로 향상시킬 수 있다고 설명하고 있습니다. 추후에 이 기법에 대해서는 별도의 장을 마련하여 소개하고 테스트를 진행할 수 있을 것입니다.
 
@@ -350,7 +350,7 @@ OpenAI가 제공하는 기본 autotuning 공간에서는 다음과 같습니다.
         key=['M', 'N', 'K'],
     )
 
-![이미지](images/img_02.png)
+![이미지](images/triton_mlir_1_dsl/img_02.png)
 
 대응하는 튜닝 공간을 조정해 보면 다음과 같습니다.
     
@@ -362,7 +362,7 @@ OpenAI가 제공하는 기본 autotuning 공간에서는 다음과 같습니다.
         key=['M', 'N', 'K'],
     )
 
-![이미지](images/img_03.png)
+![이미지](images/triton_mlir_1_dsl/img_03.png)
 
 search space를 계속해서 조정하면 다음과 같습니다.
     
@@ -374,7 +374,7 @@ search space를 계속해서 조정하면 다음과 같습니다.
         key=['M', 'N', 'K'],
     )
 
-![이미지](images/img_04.png)
+![이미지](images/triton_mlir_1_dsl/img_04.png)
 
 한 단계 더 수정해 보면 다음과 같습니다.
     
@@ -386,7 +386,7 @@ search space를 계속해서 조정하면 다음과 같습니다.
         key=['M', 'N', 'K'],
     )
 
-![이미지](images/img_05.png)
+![이미지](images/triton_mlir_1_dsl/img_05.png)
 
 위의 간단한 실험을 통해 알 수 있듯이, 비교적 좋은 TFLOPS 수치를 얻으려면 "BLOCK_SIZE_M", "BLOCK_SIZE_N", "BLOCK_SIZE_K", "num_stages", "num_warps" 모두에 대해 적절한 조정이 필요하며, 그래야 cuBLAS에 필적하거나 그 이상의 성능 상한선을 얻을 수 있습니다.  
 

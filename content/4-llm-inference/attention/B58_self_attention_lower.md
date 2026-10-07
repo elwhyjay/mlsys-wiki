@@ -15,7 +15,7 @@
 
 상편에서 self-attention의 CUDA 기본 구현과 최적화를 다뤘습니다 ([B57](../B57_ops7_self_attention_upper/README.md) 참고).
 
-![상편](images/img_001.png)
+![상편](images/B58_ops8_self_attention_lower/img_001.png)
 *紫氣東來: ops(7) self-attention의 CUDA 구현과 최적화 (상) (94 추천)*
 
 본 글은 하편으로, cuDNN 기반 구현과 역전파 구현을 다룹니다.
@@ -241,7 +241,7 @@ block_size  512 | time 0.167426 ms
 
 RTX 4090 + CUDA 12.4에서 V1~V5와 cuDNN을 다시 측정한 비교:
 
-![V1~V5 vs cuDNN](images/v2-eaec6527118ba68abe2085a79dd84237_1440w.jpg)
+![V1~V5 vs cuDNN](images/B58_ops8_self_attention_lower/v2-eaec6527118ba68abe2085a79dd84237_1440w.jpg)
 
 ## 2. self-attention 역전파 구현
 
@@ -265,7 +265,7 @@ dX = Wᵀ · dY
 
 `P = Softmax(S)`, `S = Q Kᵀ / √dₖ`, `O = P V` 라 하면 역전파는:
 
-![attention 역전파](images/v2-ebd6a3060caeeee0146805d2a420a0d8_1440w.jpg)
+![attention 역전파](images/B58_ops8_self_attention_lower/v2-ebd6a3060caeeee0146805d2a420a0d8_1440w.jpg)
 
 ### 2.2 CPU 구현
 
@@ -451,7 +451,7 @@ block_size 1024 | time  1.875651 ms
 
 여러 방법 비교:
 
-![V1~V8 비교](images/v2-d05e10189a4c99d8749988549d00a108_1440w.jpg)
+![V1~V8 비교](images/B58_ops8_self_attention_lower/v2-d05e10189a4c99d8749988549d00a108_1440w.jpg)
 
 코드: [attention_backward.cu](https://github.com/ifromeast/cuda_learning/blob/main/04_transformer/ops/attention_backward.cu).
 
