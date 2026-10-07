@@ -22,7 +22,7 @@
 - matmul 두 입력의 shape는 각각 `[m, k]`, `[k, n]`
 - 왜 height/width로 표현하지 않을까?
 - 음성/물리 계산에도 matmul을 쓰는데, 반드시 이미지의 height 개념이 있는 건 아님
-- 역사적인 흔적이며, OpenBLAS와 논문이 이런 식으로 m·n·k 의미를 정해 놓았음
+- 역사적인 흔적이며, [OpenBLAS](https://github.com/xianyi/OpenBLAS)와 논문이 이런 식으로 m·n·k 의미를 정해 놓았음
 - 이미 사실상의 표준이라, 회사가 달라도 dev들이 `split_k`라고 하면 가운데 차원을 가리킴
 - 왜 인덱스 계산에 32가 그렇게 자주 등장할까?
 - CUDA의 **사고 단위**는 **warp**이고, 한 warp는 32 thread임
@@ -37,6 +37,7 @@
 
 `chgemm`을 작성한 후로 GPU kernel도 한번 만들어 보고 싶었습니다. 평소엔 kernel을 쓰지 않고 옆에서 가르쳐 줄 사람도 없는 상태였습니다. 첫 고민은 "이 짧은 여가 시간으로 Vulkan/GLSL을 배우는 게 좋을까, CUDA를 배우는 게 좋을까?"였습니다.
 
+고민 끝에 모든 GPU의 출발점인 컴퓨터 그래픽스 [GAMES101](http://games-cn.org/intro-graphics/)부터 배웠습니다... 두 달 동안 얻은 것은 분명 많았지만, 애초의 목적에서는 오히려 더 멀어진 듯했습니다. 게다가 고수님의 [GAMES201](http://games-cn.org/games201/)이 또 손짓하고 있었고요...
 
 아니, GAMES의 유혹에 더 빠지면 안 됩니다. 그래픽스 전공이 아니니 집중해야죠. 그래서 Vulkan API 튜토리얼을 보기 시작했고... 지금까지도 1500줄로 그 삼각형 하나 그리지 못했습니다. 대신 z-buffer로 C에서 맨손으로 그리는 법은 알게 됐죠...
 
@@ -110,7 +111,7 @@ __global__ void sgemm(int m, int n, int k, float *a, int lda, float *b, int ldb,
 }
 ```
 
-신참의 첫 번째 의문: `threadIdx.xyz`는 헷갈립니다. 특히 `Idx`에도 `x`가 있고 `xyz`에도 `x`가 있으니까요... `threadId`라고 부르면 안 됐던 걸까요?
+신참의 첫 번째 의문: [`threadIdx.xyz`](http://threadidx.xyz/)는 헷갈립니다. 특히 `Idx`에도 `x`가 있고 `xyz`에도 `x`가 있으니까요... `threadId`라고 부르면 안 됐던 걸까요?
 
 `xyz`는 그저 소프트웨어 추상이고, 본의는 사용자가 편하게 쓰라고 만든 것입니다. **`chw/hwc` 같은 layout 개념과는 아무 관련이 없습니다**(이미지 코드를 많이 쓴 사람일수록 layout으로 연상하기 쉽습니다). 바닥의 스케줄링 단위는 32이고, 일단 이 숫자만 기억하세요.
 
@@ -253,13 +254,13 @@ occupancy는 참고용일 뿐 정확하진 않습니다.
 
 CPU `perf`처럼 명령어 한 줄씩의 hit rate와 병목 지점을 바로 알려 주는 도구가 있으면 좋겠다고 생각했습니다.
 
-처음에는 Nsight Systems를 다운로드했는데, 유용한 정보가 별로 없었습니다... 화면을 보여드리자면:
+처음에는 [Nsight Systems](https://developer.nvidia.com/nsight-visual-studio-edition)를 다운로드했는데, 유용한 정보가 별로 없었습니다... 화면을 보여드리자면:
 
 ![Nsight Systems UI](images/v2-951cb1d01a1493109e29a36417e19481_1440w.jpg)
 
 완성된 bin을 분석하기엔 적합하지만 작은 kernel 분석엔 그리 알맞지 않은 느낌입니다.
 
-댓글의 @CC仕님 알려주셔서, 두 번째로는 Nsight Compute를 받았는데 이건 sudo 권한이나 `CAP_SYS_ADMIN`이 필요합니다. 아... 지금 환경이 안 돼서 일단 스크린샷만 보겠습니다.
+댓글의 @CC仕님 알려주셔서, 두 번째로는 Nsight Compute를 받았는데 이건 [sudo 권한이나 `CAP_SYS_ADMIN`이 필요합니다](https://developer.nvidia.com/nvidia-development-tools-solutions-err-nvgpuctrperm-nsightcompute). 아... 지금 환경이 안 돼서 일단 스크린샷만 보겠습니다.
 
 ![Nsight Compute kernel 분석](images/v2-0257b46c9c50428de213496d683bba63_1440w.jpg)
 *Nsight Compute의 kernel 분석*
@@ -334,7 +335,7 @@ int to_b = (threadIdx.x / 32) * SMEM_LDB + (threadIdx.x % 32);
 ...
 ```
 
-128×8 크기의 subA는 gmem → smem 이동 시 슬쩍 transpose를 했습니다. 각 thread가 4행 1열을 1행으로 바꿉니다. 어쨌든 `trans(A)`가 메모리상 연속이니까요. 白牛의 *OpenBLAS gemm 입문*에 이미 나와 있는 내용입니다.
+128×8 크기의 subA는 gmem → smem 이동 시 슬쩍 transpose를 했습니다. 각 thread가 4행 1열을 1행으로 바꿉니다. 어쨌든 `trans(A)`가 메모리상 연속이니까요. 白牛의 [*OpenBLAS gemm 입문*](https://zhuanlan.zhihu.com/p/65436463)에 이미 나와 있는 내용입니다.
 
 ```cuda
 int from_a = (blockIdx.y * 128 + threadIdx.x / 8 * 4) * k + threadIdx.x % 8;
@@ -363,7 +364,7 @@ transposeA의 단위가 4라서 매번 2×2개의 4×4 결과를 계산하는데
 
 CUDA kernel과 CPU kernel의 또 다른 차이는 **어셈블리가 그리 유용하지 않다**는 점입니다. GPU는 thread 하나하나가 약하기 때문에, 간단한 시나리오에선 컴파일러가 손으로 짠 어셈블리를 넘는 일도 드물지 않습니다.
 
-白牛의 *ARMv7 4×4 kernel 게으른 최적화 실습* 처럼 명령어가 몇 번 발사되는지, 몇 cycle 지연인지, 명령어 간 상호 은닉이 어떻게 되는지 따지는 식의 사고는 GPU에선 의미가 없습니다...
+白牛의 [*ARMv7 4×4 kernel 게으른 최적화 실습*](https://zhuanlan.zhihu.com/p/333799799) 처럼 명령어가 몇 번 발사되는지, 몇 cycle 지연인지, 명령어 간 상호 은닉이 어떻게 되는지 따지는 식의 사고는 GPU에선 의미가 없습니다...
 
 MMult_cuda_10에서는 몇 가지 ptxas(어셈블리) 기법을 시도했습니다.
 
@@ -443,4 +444,4 @@ MMult_cuda_10에서는 `a_ldg_reg`로 gmem → smem 이동을 보조했습니다
 
 링크:
 - https://github.com/MegEngine/MegEngine
-- MegStudio — 무료 V100 Python 환경을 제공하는 온라인 딥러닝 플랫폼
+- [MegStudio](https://studio.brainpp.com/) — 무료 V100 Python 환경을 제공하는 온라인 딥러닝 플랫폼
