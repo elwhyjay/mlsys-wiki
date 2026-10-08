@@ -343,7 +343,9 @@ if [ -d "$WIKI/.git" ] && command -v git >/dev/null 2>&1; then
       | grep -iE '\.(png|jpe?g|gif|svg|webp)$' \
       | while IFS= read -r rel; do
           rel="${rel%%#*}"; rel="${rel%%\?*}"
-          [ -f "$d/$rel" ] && printf '%s\n' "${d#$WIKI/}/$rel"
+          # ](./img1.webp) 같은 참조 때문에 경로에 /./ 가 남으면 git 목록과
+          # 문자열이 어긋나 멀쩡히 추적 중인 파일이 누락으로 보고된다.
+          [ -f "$d/$rel" ] && printf '%s\n' "${d#$WIKI/}/$rel" | sed 's|/\./|/|g' 
         done
   done | sort -u > "$REFD"
   git -C "$WIKI" ls-files -- content | sort -u > "$TRACKED"
