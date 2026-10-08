@@ -18,14 +18,23 @@ IMG_EXT = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp',
            'image/gif': 'gif', 'image/svg+xml': 'svg'}
 
 
-def slice_div(html, start):
-    """start 위치에서 열린 div를 짝이 맞는 </div> 까지 잘라낸다."""
+def slice_tag(html, start, tag):
+    """start 위치에서 열린 <tag>를 짝이 맞는 </tag> 까지 잘라낸다."""
     depth = 0
-    for m in re.finditer(r'<(/?)div\b', html[start:]):
+    for m in re.finditer(r'<(/?)%s\b' % tag, html[start:]):
         depth += -1 if m.group(1) else 1
         if depth == 0:
             return html[start:html.index('>', start + m.end()) + 1]
     return html[start:]
+
+
+# 본문 컨테이너 후보: 지후, weixin, 그리고 <article>/<main> 을 쓰는 보통의 블로그
+CONTAINERS = [
+    (r'<div class="RichText ztext Post-RichText[^"]*"', 'div'),
+    (r'<div[^>]+id="js_content"', 'div'),
+    (r'<article\b', 'article'),
+    (r'<main\b', 'main'),
+]
 
 
 def extract(path, outdir, imgprefix):
@@ -37,13 +46,15 @@ def extract(path, outdir, imgprefix):
     html = html_part.get_payload(decode=True).decode('utf-8', 'replace')
 
     t = re.search(r'<title>(.*?)</title>', html, re.S)
-    title = re.sub(r'\s*-\s*知乎\s*$', '', t.group(1).strip()) if t else os.path.basename(path)
-    # zhihu, then weixin (mp.weixin.qq.com)
-    m = (re.search(r'<div class="RichText ztext Post-RichText[^"]*"', html)
-         or re.search(r'<div[^>]+id="js_content"', html))
-    if not m:
-        raise SystemExit("본문 div를 못 찾음: " + path)
-    art = slice_div(html, m.start())
+    title = re.sub(r'\s*[-–|·]\s*(知乎|.{0,30}Blog|GPU Notes)\s*$', '', t.group(1).strip()) if t else os.path.basename(path)
+    art = None
+    for pat, tag in CONTAINERS:
+        m = re.search(pat, html)
+        if m:
+            art = slice_tag(html, m.start(), tag)
+            break
+    if art is None:
+        raise SystemExit("본문 컨테이너를 못 찾음: " + path)
 
     os.makedirs(outdir, exist_ok=True)
     saved = {}
