@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 두 축의 재정리
+## 0. 두가지 기준으로 재정리
 
 각 framework를 두 axis로 위치시키면 차이가 분명해진다.
 
@@ -81,7 +81,7 @@ torch.ops.quantized_decomposed.quantize_per_channel
 torch.ops.quantized_decomposed.dequantize_per_channel
 ```
 
-각 op에 `scale, zero_point, quant_min, quant_max, dtype`이 명시적 인자로 박힌다.
+각 op에 `scale, zero_point, quant_min, quant_max, dtype`이 명시적 인자로 주어진다.
 
 **Quantizer interface**: backend 확장점. `Quantizer` subclass가 `QuantizationSpec` / `QuantizationAnnotation`으로 각 node의 input/output을 어떻게 quantize할지 annotate한다.
 
@@ -358,18 +358,18 @@ ORT, TensorRT, OpenVINO LPT, PyTorch Inductor 모두 핵심 알고리즘은 동�
 
 표현이 graph node든, FakeQuantize든, ATen op든 — optimizer가 하는 일은 거의 같다. 차이는 IR이지 알고리즘이 아니다.
 
-### 11.2 두 분파의 의의
+### 11.2 두 유형의 의의
 
-- **Graph entity 진영** (ONNX, PT2E, TRT, OpenVINO, ExecuTorch): static graph backend, AOT compiler, interchange format에 유리
-- **Type/attribute 진영** (torchao, TFLite, MLIR quant, vLLM compressed-tensors): LLM weight-only, FP8 training, runtime-specialized kernel에 유리
+- **Graph entity** (ONNX, PT2E, TRT, OpenVINO, ExecuTorch): static graph backend, AOT compiler, interchange format에 유리
+- **Type/attribute** (torchao, TFLite, MLIR quant, vLLM compressed-tensors): LLM weight-only, FP8 training, runtime-specialized kernel에 유리
 
-흥미로운 점은 **두 진영이 수렴하지 않는다**는 것. 각자의 사용 시나리오가 다르고, 같은 모델을 두 표현 사이에서 변환하는 과정에서 export/import 비용이 발생한다 (torchao → ONNX QDQ → TensorRT 같은 흐름).
+흥미로운 점은 **두 유형이 수렴하지 않는다**는 것. 각자의 사용 시나리오가 다르고, 같은 모델을 두 표현 사이에서 변환하는 과정에서 export/import 비용이 발생한다 (torchao → ONNX QDQ → TensorRT 같은 흐름).
 
 ### 11.3 표현이 만들어내는 버그
 
-graph entity 진영은 **graph rewriter의 selector 정확성**이 정확성의 ground truth가 된다 — [qdq-gemm-alpha.md](qdq-gemm-alpha.md)의 α × bias 사례.
+graph entity 경우는 **graph rewriter의 selector 정확성**이 정확성의 ground truth가 된다 — [qdq-gemm-alpha.md](qdq-gemm-alpha.md)의 α × bias 사례.
 
-type/attribute 진영은 **dispatcher와 kernel의 일치성**이 ground truth가 된다 — tensor subclass가 어떤 kernel을 호출하는지가 type 자체에서 도출되므로, dispatch logic의 부정확함이 silent wrong-output을 만든다.
+type/attribute 경우는 **dispatcher와 kernel의 일치성**이 ground truth가 된다 — tensor subclass가 어떤 kernel을 호출하는지가 type 자체에서 도출되므로, dispatch logic의 부정확함이 silent wrong-output을 만든다.
 
 각 진영의 failure mode가 다르다.
 

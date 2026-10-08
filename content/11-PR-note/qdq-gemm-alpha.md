@@ -1,4 +1,4 @@
-# QDQ Gemm Fusion과 α: ONNX Runtime PR #28131에 대한 소고
+# QDQ Gemm Fusion과 scalar factor α: ONNX Runtime PR #28131에 대한 소고
 
 > 이 문서는 [mul.md](mul.md)의 GEMM 일반 이론을 전제로 한다.
 > 특히 §4 (BLAS canonical form $C = \alpha AB + \beta C$), §9 (epilogue fusion), §11 (quantization scaling), §12 (Q/DQ pipeline)을 먼저 읽으면 좋다.
@@ -11,7 +11,8 @@ ONNX Runtime은 양자화된 모델을 **QDQ format**으로 표현한다. fp32 g
 
 ```
 DQ(A_q) -> Gemm(α, β, bias) -> Q(Y)
-DQ(B_q) ----^
+            ↑
+DQ(B_q) ____⅃ 
 ```
 
 ```
@@ -41,9 +42,8 @@ $$
 
 - $\alpha$: $AB$에만 곱해진다
 - $\beta$: bias $C$에만 곱해진다
-- 두 scalar는 **분리되어** 적용된다
 
-이게 핵심이다. spec 자체는 `α`와 bias를 독립된 자유도로 분리해 두었다.
+ spec 자체는 `α`와 bias를 독립된 자유도로 분리해 두었다.
 
 ### 2.2 QGemm의 내부 연산
 
@@ -103,7 +103,7 @@ $$
 - **Gemm scaling** ($\alpha$): $AB$에만 곱해야 함
 - **dequant scaling** ($s_A s_B$): **int32 accumulator 전체** (bias 포함)에 곱해짐
 
-이 두 scaling이 하나의 곱셈으로 fuse되는 순간, $\alpha$를 bias로부터 분리할 수단이 사라진다. β = 1인 한 이 fused layout은 정확하지만, **β = 1을 가정한 채 α만 비-1로 두는 순간 layout이 깨진다.**
+이 두 scaling이 하나의 곱셈으로 fuse되는 순간, $\alpha$를 bias로부터 분리할 수단이 사라진다. β = 1인 한 이 fused layout은 정확하지만, **β = 1을 가정한 채 α만 1이 아닌값으로 두면 layout이 깨진다.**
 
 bias가 0이거나 α = 1이면 두 식이 일치한다 — issue #28130의 reporter가 관측한 현상과 정확히 부합한다.
 
@@ -253,4 +253,4 @@ GEMM에서 `α`는 1바이트짜리 scalar처럼 보이지만, 그것이 fused I
 
 - ONNX Runtime PR #28131: Reject QDQ Gemm→QGemm fusion when alpha != 1 with bias
 - ONNX Runtime Issue #28130: original bug report
-- 이론적 배경: [mul.md](../../10-Theoretical-stuff/mul.md)
+- 이론적 배경: [mul.md](../10-Theoretical-stuff/mul.md)
