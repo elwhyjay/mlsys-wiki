@@ -68,6 +68,7 @@ $$
 | Alman–Williams (2021) | $O(N^{2.3728596})$ |
 
 matrix multiplication exponent $\omega$의 정확한 값은 여전히 미해결 문제이며 $\omega \ge 2$가 자명한 lower bound다.
+>최근(2026-10-7) OAI에서 무더기로 발표한 미해결 난제중에 lower 을 갱신한 방법론이있다고한다. $O(N^{2.25})$ 쯤이라나 그렇다는것같다. 자세한건 [link](https://github.com/openai/math) 에서 찾아보자.
 
 그러나 실무에서는 **거의 항상 $O(N^3)$ 알고리즘이 사용된다.** 이유는:
 
@@ -111,9 +112,9 @@ Naive 구현:
 
 ```cpp
 for (int i = 0; i < M; ++i)
-  for (int j = 0; j < N; ++j)
-    for (int k = 0; k < K; ++k)
-      C[i][j] += A[i][k] * B[k][j];
+    for (int j = 0; j < N; ++j)
+      for (int k = 0; k < K; ++k)
+        C[i][j] += A[i][k] * B[k][j];
 ```
 
 이 코드는 cache locality가 매우 나쁘다.
