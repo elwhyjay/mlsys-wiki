@@ -38,7 +38,12 @@ def extract(path, outdir, imgprefix):
 
     t = re.search(r'<title>(.*?)</title>', html, re.S)
     title = re.sub(r'\s*-\s*知乎\s*$', '', t.group(1).strip()) if t else os.path.basename(path)
-    art = slice_div(html, re.search(r'<div class="RichText ztext Post-RichText[^"]*"', html).start())
+    # zhihu, then weixin (mp.weixin.qq.com)
+    m = (re.search(r'<div class="RichText ztext Post-RichText[^"]*"', html)
+         or re.search(r'<div[^>]+id="js_content"', html))
+    if not m:
+        raise SystemExit("본문 div를 못 찾음: " + path)
+    art = slice_div(html, m.start())
 
     os.makedirs(outdir, exist_ok=True)
     saved = {}
